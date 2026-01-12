@@ -31,6 +31,7 @@ pub struct ModListWidget {
     mouse_hover_y: Option<i32>,
     selected: Vec<usize>,
     selected_pivot: usize,
+    select_defer: Option<bool>,
 }
 
 impl ModListWidget {
@@ -98,6 +99,7 @@ impl ModListWidget {
             mouse_hover_y: None,
             selected: Vec::new(),
             selected_pivot: 0,
+            select_defer: None,
         }
     }
 
@@ -486,7 +488,23 @@ impl super::Widget for ModListWidget {
                         && let Entry::Mod(entry) = self.get_entry(y)
                         && entry == clicked
                     {
-                        // selected
+                        if let Some(is_ctrl) = self.select_defer.take() {
+                            if is_ctrl {
+                                let check = self.selected.iter()
+                                    .enumerate()
+                                    .find(|(_, c)| **c == clicked);
+
+                                if let Some((i, _)) = check {
+                                    self.selected.remove(i);
+                                } else {
+                                    self.selected.push(clicked);
+                                }
+                            } else {
+                                self.selected.clear();
+                                self.selected.push(clicked);
+                            }
+                            control.redraw();
+                        }
                     } else {
                         let (swap_to, _) = self.get_slot(y);
                         if self.move_selected(swap_to) {
@@ -512,7 +530,7 @@ impl super::Widget for ModListWidget {
             EventKind::MousePress => {
                 if is_inside {
                     self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(y) {
-                        if !(event.shift || event.ctrl) {// && !self.selected.contains(&clicked) {
+                        if !(event.shift || event.ctrl) && !self.selected.contains(&clicked) {
                             self.selected.clear();
                         }
 
@@ -536,22 +554,19 @@ impl super::Widget for ModListWidget {
                                     self.selected.push(i);
                                 }
                             }
-                            control.redraw();
                         } else {
                             self.selected_pivot = clicked;
                             let check = self.selected.iter()
                                 .enumerate()
                                 .find(|(_, c)| **c == clicked);
-                            if let Some((i, _)) = check {
-                                if event.ctrl {
-                                    self.selected.remove(i);
-                                }
-                            } else {
+
+                            self.select_defer = (check.is_some() || event.ctrl).then(|| event.ctrl);
+                            if self.select_defer.is_none() {
                                 self.selected.push(clicked);
                             }
-                            control.redraw();
                         }
 
+                        control.redraw();
                         control.capture_mouse();
                         Some(clicked)
                     } else {
