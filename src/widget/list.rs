@@ -201,6 +201,31 @@ impl ModListWidget {
         }
     }
 
+    fn toggle_mod(&mut self, entry: usize, enable: Option<bool>) -> bool {
+        let Some(m) = self.lorder.mods.get_mut(entry) else {
+            return false;
+        };
+
+        let new_state = match (enable, m.state.clone()) {
+            (Some(true), ModState::Enabled) => ModState::Enabled,
+            (Some(false), ModState::Disabled | ModState::MissingEntry)
+                => ModState::Disabled,
+
+            (_, ModState::Enabled) => ModState::Disabled,
+            (_, ModState::Disabled | ModState::MissingEntry)
+                => ModState::Enabled,
+
+            _ => m.state.clone(),
+        };
+
+        if new_state != m.state {
+            m.state = new_state;
+            true
+        } else {
+            false
+        }
+    }
+
     fn get_entry(&self, y: i32) -> Entry {
         let top = Self::MARGIN_Y as i32;
         let offset = y - top;
@@ -588,18 +613,8 @@ impl super::Widget for ModListWidget {
             }
 
             EventKind::MouseDoubleClick if is_inside => {
-                if let Entry::Mod(entry) = self.get_entry(y)
-                    && let Some(m) = self.lorder.mods.get_mut(entry)
-                {
-                    let new_state = match m.state {
-                        ModState::Enabled => ModState::Disabled,
-                        ModState::Disabled
-                        | ModState::MissingEntry => ModState::Enabled,
-                        _ => m.state.clone(),
-                    };
-
-                    if new_state != m.state {
-                        m.state = new_state;
+                if let Entry::Mod(entry) = self.get_entry(y) {
+                    if self.toggle_mod(entry, None) {
                         self.update_mod_lorder();
                         control.redraw();
                     }
