@@ -2,10 +2,7 @@ Basic mod manager that hooks and overlays the Darktide launcher.
 
 Current features:
 - toggle/reorder mods
-- [AML] support
 - linux/wine support (~~winter~~ year of the linux desktop is coming)
-
-[AML]: https://www.nexusmods.com/warhammer40kdarktide/mods/246
 
 ## Use
 
