@@ -70,7 +70,7 @@ unsafe extern "system" fn update_layered_window_indirect_hook(
             if res.is_some() {
                 0x77777777
             } else {
-                let mut info = (*info).clone();
+                let mut info = *info;
                 info.prcDirty = core::ptr::null();
                 update_layered_window_indirect(hwnd, &info)
             }

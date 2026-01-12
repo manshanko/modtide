@@ -90,7 +90,7 @@ impl Event {
         let mut shift = false;
         if kind == EventKind::MousePress {
             ctrl = w_param & 0x0008 /*MK_CONTROL*/ != 0;
-            shift = w_param & 0x0004 /*MK_SHIFT*/ as usize != 0;
+            shift = w_param & 0x0004 /*MK_SHIFT*/ != 0;
         }
 
         let mut pt = POINT {
@@ -354,7 +354,7 @@ impl Control {
             }
         }
 
-        target = self.capture_mouse.or_else(|| target);
+        target = self.capture_mouse.or(target);
 
         if let Some(i) = target {
             scope.widget = i;
@@ -570,12 +570,13 @@ unsafe extern "system" fn mouse_ll_proc(
                     let hwnd = GetForegroundWindow();
                     let current_thread_id = GetWindowThreadProcessId(hwnd, None);
                     if current_thread_id == thread_id {
-                        if let Err(err) = PostMessageW(
+                        let res = PostMessageW(
                             Some(hwnd),
                             Control::WM_PRIV_MOUSE,
                             WPARAM(0),
                             LPARAM(msg as isize),
-                        ) {
+                        );
+                        if let Err(err) = res {
                             eprintln!("failed PostMessageW: {err:?}");
                         }
                     }
@@ -625,7 +626,7 @@ impl GlobalMouseHook {
             unsafe {
                 loop {
                     if GetMessageW(&mut msg, None, 0, 0).0 > 0 {
-                        _ = TranslateMessage(&mut msg);
+                        _ = TranslateMessage(&msg);
                         _ = DispatchMessageW(&msg);
                     } else {
                         break;

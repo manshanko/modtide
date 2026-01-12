@@ -20,7 +20,7 @@ impl ModEngine {
     pub fn scan(path: impl AsRef<Path>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
         let mut out = Vec::new();
         let path = path.as_ref();
-        for fd in fs::read_dir(&path)? {
+        for fd in fs::read_dir(path)? {
             let dir = match fs::read_dir(fd?.path()) {
                 Ok(fd) => fd,
                 Err(err) if err.kind() == std::io::ErrorKind::NotADirectory => continue,
@@ -49,7 +49,7 @@ impl ModEngine {
                 out.push((ext, lower));
             }
         }
-        out.sort_by(|(_, a), (_, b)| a.cmp(&b));
+        out.sort_by(|(_, a), (_, b)| a.cmp(b));
         Ok(out.into_iter().map(|(p, _)| p).collect())
     }
 

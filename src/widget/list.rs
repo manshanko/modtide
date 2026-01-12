@@ -178,7 +178,7 @@ impl ModListWidget {
         };
 
         let paths = ModEngine::scan(&self.mods_path)?;
-        self.lorder.load(&load_order, &paths)?;
+        self.lorder.load(load_order, &paths)?;
 
         Ok(())
     }
@@ -439,7 +439,6 @@ impl super::Widget for ModListWidget {
     fn config(&self) -> WidgetConfig {
         WidgetConfig {
             listen_double_click: true,
-            ..Default::default()
         }
     }
 
@@ -490,13 +489,11 @@ impl super::Widget for ModListWidget {
                     self.mouse_hover_y = Some(y);
                     self.mouse_drag_y = Some(y);
                 } else if is_inside {
-                    let is_hover = match self.get_entry(y) {
-                        Entry::Mod(_) => true,
-                        Entry::Builtin(_) => true,
-                        _ => false,
+                    self.mouse_hover_y = match self.get_entry(y) {
+                        Entry::Mod(_)
+                        | Entry::Builtin(_) => Some(y),
+                        _ => None,
                     };
-
-                    self.mouse_hover_y = is_hover.then(|| y);
                 } else if self.mouse_hover_y.is_some(){
                     self.mouse_hover_y = None;
                 }
@@ -541,7 +538,7 @@ impl super::Widget for ModListWidget {
                 self.clicked_mod = None;
                 self.mouse_drag_y = None;
 
-                if self.update_mouse_hover(is_inside.then(|| y)) {
+                if self.update_mouse_hover(is_inside.then_some(y)) {
                     control.redraw();
                 }
             }
@@ -555,7 +552,7 @@ impl super::Widget for ModListWidget {
             EventKind::MousePress => {
                 if is_inside {
                     self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(y) {
-                        if !(event.shift || event.ctrl) && !self.selected.contains(&clicked) {
+                        if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {
                             self.selected.clear();
                         }
 
@@ -585,7 +582,7 @@ impl super::Widget for ModListWidget {
                                 .enumerate()
                                 .find(|(_, c)| **c == clicked);
 
-                            self.select_defer = (check.is_some() || event.ctrl).then(|| event.ctrl);
+                            self.select_defer = (check.is_some() || event.ctrl).then_some(event.ctrl);
                             if self.select_defer.is_none() {
                                 self.selected.push(clicked);
                             }
@@ -595,29 +592,26 @@ impl super::Widget for ModListWidget {
                         control.capture_mouse();
                         Some(clicked)
                     } else {
-                        if !(event.shift || event.ctrl) {
-                            if !self.selected.is_empty() {
-                                self.selected.clear();
-                                control.redraw();
-                            }
+                        if !(event.shift || event.ctrl || self.selected.is_empty()) {
+                            self.selected.clear();
+                            control.redraw();
                         }
 
                         None
                     };
-                } else if !(event.ctrl || event.shift) {
-                    if !self.selected.is_empty() {
-                        self.selected.clear();
-                        control.redraw();
-                    }
+                } else if !(event.ctrl || event.shift || self.selected.is_empty()) {
+                    self.selected.clear();
+                    control.redraw();
                 }
             }
 
-            EventKind::MouseDoubleClick if is_inside => {
-                if let Entry::Mod(entry) = self.get_entry(y) {
-                    if self.toggle_mod(entry, None) {
-                        self.update_mod_lorder();
-                        control.redraw();
-                    }
+            EventKind::MouseDoubleClick => {
+                if is_inside
+                    && let Entry::Mod(entry) = self.get_entry(y)
+                    && self.toggle_mod(entry, None)
+                {
+                    self.update_mod_lorder();
+                    control.redraw();
                 }
             }
 
@@ -668,14 +662,10 @@ impl super::Widget for ModListWidget {
 
                     for i in &self.selected {
                         if let Some(m) = mods.get_mut(*i) {
-                            if all_enabled {
-                                if m.state == ModState::Enabled {
-                                    m.state = ModState::Disabled;
-                                }
-                            } else {
-                                if m.state == ModState::Disabled {
-                                    m.state = ModState::Enabled;
-                                }
+                            match (all_enabled, m.state.clone()) {
+                                (true, ModState::Enabled) => m.state = ModState::Disabled,
+                                (false, ModState::Disabled) => m.state = ModState::Enabled,
+                                _ => (),
                             }
                         }
                     }

@@ -164,6 +164,6 @@ impl super::Widget for ButtonWidget {
             | Mode::Active => &self.active,
         };
 
-        context.draw_bitmap(&bitmap, Some(&rect), None);
+        context.draw_bitmap(bitmap, Some(&rect), None);
     }
 }

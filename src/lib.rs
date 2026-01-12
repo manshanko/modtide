@@ -93,30 +93,33 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     let brush = context.create_solid_color_brush(&brush_color).unwrap();
     let text_format = context.create_text_format(windows::core::w!("Arial"), 17.0).unwrap();
 
-    let (button_active, button_idle) = if button_active.is_none() || button_idle.is_none() {
-        let mut button_active = None;
-        let mut button_idle = None;
-        for (button, is_active) in [
-            (&mut button_active, true),
-            (&mut button_idle, false),
-        ] {
-            let mut draw = context.create_compatible_render_target(
-                ButtonWidget::WIDTH,
-                ButtonWidget::HEIGHT,
-            ).unwrap();
-            ButtonWidget::fallback(&mut draw, &brush, is_active);
-            *button = draw.get_bitmap().ok();
+    let (button_active, button_idle) = match (button_active, button_idle) {
+        (Some(button_active), Some(button_idle)) => {
+            (
+                context.create_bitmap_from_png(button_active, None).unwrap(),
+                context.create_bitmap_from_png(button_idle, None).unwrap(),
+            )
         }
+        _ => {
+            let mut button_active = None;
+            let mut button_idle = None;
+            for (button, is_active) in [
+                (&mut button_active, true),
+                (&mut button_idle, false),
+            ] {
+                let mut draw = context.create_compatible_render_target(
+                    ButtonWidget::WIDTH,
+                    ButtonWidget::HEIGHT,
+                ).unwrap();
+                ButtonWidget::fallback(&mut draw, &brush, is_active);
+                *button = draw.get_bitmap().ok();
+            }
 
-        (
-            button_active.unwrap(),
-            button_idle.unwrap(),
-        )
-    } else {
-        (
-            context.create_bitmap_from_png(button_active.unwrap(), None).unwrap(),
-            context.create_bitmap_from_png(button_idle.unwrap(), None).unwrap(),
-        )
+            (
+                button_active.unwrap(),
+                button_idle.unwrap(),
+            )
+        }
     };
 
     let background = if let Some(background) = background {
@@ -238,7 +241,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok(hdc) = draw.get_dc() {
                 let hdc = hdc.hdc();
 
-                let mut info = org_info.clone();
+                let mut info = *org_info;
                 info.hdcSrc = hdc;
                 info.pblend = &bf;
                 info.pptDst = core::ptr::null();
