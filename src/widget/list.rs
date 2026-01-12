@@ -207,7 +207,7 @@ impl ModListWidget {
         } else {
             let offset = self.scroll + offset;
             let entry = (offset / self.item_height) as usize;
-            if let Some(builtin) = self.builtins.get(entry) {
+            if let Some(_builtin) = self.builtins.get(entry) {
                 Entry::Builtin(entry)
             } else {
                 Entry::Mod(entry - self.builtins.len())
@@ -498,7 +498,6 @@ impl super::Widget for ModListWidget {
                 self.clicked_mod = None;
                 self.mouse_drag_y = None;
 
-                let hover = self.mouse_hover_y;
                 if self.update_mouse_hover(is_inside.then(|| y)) {
                     control.redraw();
                 }

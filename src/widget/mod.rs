@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
@@ -49,7 +48,7 @@ pub enum EventKind {
     MouseEnter,
     MouseLeave,
     KeyDown(KeyKind),
-    LostFocus,
+    //LostFocus,
 }
 
 #[derive(Clone)]
@@ -124,15 +123,6 @@ impl Event {
             WM_LBUTTONDOWN => true,
             //WM_LBUTTONUP => true,
             WM_MOUSEWHEEL => true,
-            _ => false,
-        }
-    }
-
-    fn use_hooked(&self) -> bool {
-        match self.kind {
-            EventKind::MouseMove
-            | EventKind::MousePress
-            | EventKind::MouseRelease => true,
             _ => false,
         }
     }
@@ -214,7 +204,6 @@ pub struct Control {
         w_param: WPARAM,
         l_param: LPARAM,
     ) -> LRESULT)>,
-    refs: usize,
 }
 
 unsafe impl Send for Control {}
@@ -246,33 +235,28 @@ impl Control {
         let mut display = None;
         unsafe {
             let current_proc_id = windows::Win32::System::Threading::GetCurrentProcessId();
-            let thread_id = GetWindowThreadProcessId(hwnd, None);
             for wnd_name in [
                 w!("Launcher"),
                 w!("Alpha"),
             ] {
-                unsafe {
-                    if let Ok(hwnd) = FindWindowW(None, wnd_name) {
-                        let mut proc_id =0;
-                        GetWindowThreadProcessId(hwnd, Some(&mut proc_id));
-                        assert!(proc_id == current_proc_id);
+                if let Ok(hwnd) = FindWindowW(None, wnd_name) {
+                    let mut proc_id =0;
+                    GetWindowThreadProcessId(hwnd, Some(&mut proc_id));
+                    assert!(proc_id == current_proc_id);
 
-                        let hook = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc as *const () as isize);
-                        if hook != 0 {
-                            hooks.push((hwnd, core::mem::transmute(hook)));
-                        }
-
-                        let hwnd_ = hwnd.0 as usize;
-                        crate::panic::on_unwind(move || {
-                            let hwnd = HWND(hwnd_ as *mut _);
-                            unsafe {
-                                SetWindowLongPtrW(hwnd, GWLP_WNDPROC, hook);
-                            }
-                            update_display(&hwnd);
-                        });
-
-                        display = Some(hwnd);
+                    let hook = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc as *const () as isize);
+                    if hook != 0 {
+                        hooks.push((hwnd, core::mem::transmute(hook)));
                     }
+
+                    let hwnd_ = hwnd.0 as usize;
+                    crate::panic::on_unwind(move || {
+                        let hwnd = HWND(hwnd_ as *mut _);
+                        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, hook);
+                        update_display(&hwnd);
+                    });
+
+                    display = Some(hwnd);
                 }
             }
         }
@@ -301,7 +285,6 @@ impl Control {
             dbl_click_width,
             dbl_click_height,
 
-            refs: hooks.len(),
             hooks,
         });
 
@@ -444,26 +427,26 @@ impl Control {
         }
     }
 
-    pub fn lost_focus(&mut self) {
-        let mut scope = ControlScope {
-            widget: 0,
-            events: &mut self.events,
-        };
-
-        for (i, widget) in self.widgets.iter_mut().enumerate() {
-            scope.widget = i;
-            let event = Event {
-                kind: EventKind::LostFocus,
-                ctrl: false,
-                shift: false,
-                x: -1,
-                y: -1,
-            };
-            widget.inner.handle_event(&mut scope, event);
-        }
-
-        self.handle_events();
-    }
+    //pub fn lost_focus(&mut self) {
+    //    let mut scope = ControlScope {
+    //        widget: 0,
+    //        events: &mut self.events,
+    //    };
+    //
+    //    for (i, widget) in self.widgets.iter_mut().enumerate() {
+    //        scope.widget = i;
+    //        let event = Event {
+    //            kind: EventKind::LostFocus,
+    //            ctrl: false,
+    //            shift: false,
+    //            x: -1,
+    //            y: -1,
+    //        };
+    //        widget.inner.handle_event(&mut scope, event);
+    //    }
+    //
+    //    self.handle_events();
+    //}
 }
 
 pub struct ControlScope<'a> {
@@ -480,6 +463,7 @@ impl<'a> ControlScope<'a> {
         self.events.push(WidgetEvent::CaptureMouse(None));
     }
 
+    #[allow(dead_code)]
     pub fn toggle_self(&mut self) {
         self.toggle_widget(self.widget);
     }
@@ -663,6 +647,7 @@ fn update_display(hwnd: &HWND) {
     }
 }
 
+#[allow(dead_code)]
 pub fn log(s: &str) {
     use std::io::Write;
 

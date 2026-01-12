@@ -1,5 +1,6 @@
 const PNG_HEADER: &[u8] = &[137, 80, 78, 71, 13, 10, 26, 10];
 
+#[allow(dead_code)]
 pub struct Png<'a> {
     pub buffer: &'a [u8],
     pub file_name: Option<&'a str>,

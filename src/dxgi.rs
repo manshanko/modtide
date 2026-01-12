@@ -5,14 +5,11 @@ use std::ffi::OsStr;
 use windows::core::PCWSTR;
 use windows::core::Result;
 use windows::core::Interface;
-use windows::Win32::Foundation::RECT;
 use windows::Win32::Foundation::HMODULE;
-use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct3D::*;
-use windows::Win32::Graphics::Direct3D9::*;
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::DirectWrite::*;
 use windows::Win32::Graphics::Dxgi::*;
@@ -36,7 +33,6 @@ pub struct DxgiContext {
     factory: ID2D1Factory1,
     dwfactory: IDWriteFactory,
     device: ID3D11Device,
-    dxgi: IDXGIDevice1,
     context: ID2D1RenderTarget,
     d2dcontext: ID2D1DeviceContext,
 
@@ -44,6 +40,7 @@ pub struct DxgiContext {
     height: u32,
 }
 
+#[allow(dead_code)]
 impl DxgiContext {
     //const DEFAULT_WIDTH: u32 = 1280;
     //const DEFAULT_HEIGHT: u32 = 940;
@@ -97,7 +94,6 @@ impl DxgiContext {
         let factory: ID2D1Factory1;
         let dwfactory;
         let device;
-        let dxgi;
         let context;
         let d2dcontext;
         unsafe {
@@ -122,7 +118,7 @@ impl DxgiContext {
 
             dwfactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
 
-            dxgi = device.cast::<IDXGIDevice1>()?;
+            let dxgi = device.cast::<IDXGIDevice1>()?;
             let d2d = factory.CreateDevice(&dxgi)?;
             d2dcontext = d2d.CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)?;
 
@@ -133,7 +129,6 @@ impl DxgiContext {
             factory,
             dwfactory,
             device,
-            dxgi,
             context,
             d2dcontext,
 
@@ -598,10 +593,6 @@ impl<'a> DrawScope<'a> {
             context.GetBitmap()
         }
     }
-
-    pub fn end_draw(self) {
-        drop(self);
-    }
 }
 
 impl<'a> Drop for DrawScope<'a> {
@@ -621,10 +612,6 @@ pub struct HdcScope<'a> {
 impl<'a> HdcScope<'a> {
     pub fn hdc(&self) -> HDC {
         self.hdc
-    }
-
-    pub fn release_dc(self) {
-        drop(self);
     }
 }
 

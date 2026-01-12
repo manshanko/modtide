@@ -176,20 +176,6 @@ impl ModEngine {
         }
         Ok(())
     }
-
-    pub fn move_mod(&mut self, from: usize, to: usize) {
-        if from >= self.mods.len() || to > self.mods.len() {
-            debug_assert!(from < self.mods.len());
-            debug_assert!(to <= self.mods.len());
-            return;
-        }
-
-        if from < to {
-            self.mods[from..to].rotate_left(1);
-        } else if to < from {
-            self.mods[to..=from].rotate_right(1);
-        }
-    }
 }
 
 pub struct ModEntry {

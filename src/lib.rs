@@ -1,13 +1,8 @@
-#![allow(unused_unsafe, unused_variables, unused_assignments, unused_imports, dead_code)]
 use core::ffi::c_void;
 use std::io::Read;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::Mutex;
 
-use windows::core::Interface;
 use windows::Win32::Foundation::GetLastError;
-use windows::Win32::Graphics::Dxgi::IDXGISurface1;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -208,11 +203,6 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         let widthu = u32::try_from(width).unwrap();
         let heightu = u32::try_from(height).unwrap();
         context.resize(widthu, heightu).unwrap();
-
-        rect.left = 0;
-        rect.top = 0;
-        rect.right = width;
-        rect.bottom = height;
 
         let bf = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
