@@ -1,0 +1,56 @@
+name: release
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ env.APP_VERSION }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get release version from tag
+        shell: bash
+        if: env.APP_VERSION == ''
+        run: |
+          echo "APP_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.APP_VERSION }}"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ env.APP_VERSION }}
+
+  build-release:
+    name: build-release
+    needs: ['create-release']
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: x86_64-pc-windows-msvc
+
+    - name: Build release binary
+      run: cargo build --verbose --release --target x86_64-pc-windows-msvc
+
+    - name: Create archive
+      shell: bash
+      run: |
+        staging="modtide-${{ needs.create-release.outputs.app_version }}"
+        mkdir -p "$staging"
+
+        cp README.md "$staging/"
+        cp "target/x86_64-pc-windows-msvc/release/dwmapi.dll" "$staging/"
+        7z a "$staging.zip" "$staging"
+        echo "ASSET=$staging.zip" >> $GITHUB_ENV
+
+    - name: Upload release archive
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release upload ${{ needs.create-release.outputs.app_version }} ${{ env.ASSET }}
