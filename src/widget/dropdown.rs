@@ -124,10 +124,17 @@ impl super::Widget for DropdownWidget {
 
         match event.kind {
             EventKind::MouseMove => {
-                let offset = y as u32 - Self::BORDER_SIZE;
-                let opt = (offset / Self::ENTRY_HEIGHT) as usize;
-                if self.hovered_option != Some(opt) {
-                    self.hovered_option = Some(opt);
+                let offset = y - Self::BORDER_SIZE as i32;
+                let opt = offset / Self::ENTRY_HEIGHT as i32;
+
+                let new_opt = if opt < 0 || opt >= menu.len() as i32 {
+                    None
+                } else {
+                    Some(opt as usize)
+                };
+
+                if self.hovered_option != new_opt {
+                    self.hovered_option = new_opt;
                     control.redraw();
                 }
             }
