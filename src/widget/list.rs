@@ -550,7 +550,10 @@ impl super::Widget for ModListWidget {
                     }
                 }
 
-                if self.dropdown_defer && is_right {
+                if self.dropdown_defer
+                    && is_right
+                    && self.mouse_drag_y.is_none()
+                {
                     self.mouse_hover_y = None;
                     control.move_widget(Control::DROPDOWN_WIDGET, x, y);
                     control.show_widget(Control::DROPDOWN_WIDGET);
