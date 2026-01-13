@@ -120,23 +120,23 @@ impl super::Widget for ButtonWidget {
             (EventKind::MouseLeave, Mode::Active, _) => self.mode = Mode::Held,
             (EventKind::MouseLeave, _           , _) => self.mode = Mode::Idle,
 
-            (EventKind::MouseRelease, _, true ) => self.mode = Mode::Hover,
-            (EventKind::MouseRelease, _, false) => self.mode = Mode::Idle,
-            (EventKind::MousePress  , _, true ) => self.mode = Mode::Active,
-            (EventKind::MousePress  , _, false) => self.mode = Mode::Idle,
+            (EventKind::MouseLeftRelease, _, true ) => self.mode = Mode::Hover,
+            (EventKind::MouseLeftRelease, _, false) => self.mode = Mode::Idle,
+            (EventKind::MouseLeftPress  , _, true ) => self.mode = Mode::Active,
+            (EventKind::MouseLeftPress  , _, false) => self.mode = Mode::Idle,
 
             _ => (),
         }
 
         if old != self.mode {
             match event.kind {
-                EventKind::MouseRelease => {
+                EventKind::MouseLeftRelease => {
                     control.release_mouse();
                     if old == Mode::Active {
                         control.toggle_widget(super::Control::MOD_LIST_WIDGET);
                     }
                 }
-                EventKind::MousePress => control.capture_mouse(),
+                EventKind::MouseLeftPress => control.capture_mouse(),
                 _ => (),
             }
 

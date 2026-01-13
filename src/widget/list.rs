@@ -503,7 +503,7 @@ impl super::Widget for ModListWidget {
                 }
             }
 
-            EventKind::MouseRelease => {
+            EventKind::MouseLeftRelease => {
                 if let Some(clicked) = self.clicked_mod {
                     control.release_mouse();
                     if self.mouse_drag_y.is_none()
@@ -549,7 +549,7 @@ impl super::Widget for ModListWidget {
             //    self.mouse_hover_mod = None;
             //}
 
-            EventKind::MousePress => {
+            EventKind::MouseLeftPress => {
                 if is_inside {
                     self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(y) {
                         if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {

@@ -41,8 +41,10 @@ pub enum KeyKind {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EventKind {
     MouseMove,
-    MousePress,
-    MouseRelease,
+    MouseLeftPress,
+    MouseLeftRelease,
+    MouseRightPress,
+    MouseRightRelease,
     MouseDoubleClick,
     MouseScroll(i32),
     MouseEnter,
@@ -67,8 +69,10 @@ impl Event {
             //675 => EventKind::MouseMove,
             WM_SETCURSOR => EventKind::MouseMove,
             WM_MOUSEMOVE => EventKind::MouseMove,
-            WM_LBUTTONDOWN => EventKind::MousePress,
-            WM_LBUTTONUP => EventKind::MouseRelease,
+            WM_LBUTTONDOWN => EventKind::MouseLeftPress,
+            WM_LBUTTONUP => EventKind::MouseLeftRelease,
+            WM_RBUTTONDOWN => EventKind::MouseRightPress,
+            WM_RBUTTONUP => EventKind::MouseRightRelease,
             WM_MOUSEWHEEL => {
                 let delta = (w_param >> 16) as i16;
                 EventKind::MouseScroll(delta as i32 / WHEEL_DELTA as i32)
@@ -88,7 +92,7 @@ impl Event {
 
         let mut ctrl = false;
         let mut shift = false;
-        if kind == EventKind::MousePress {
+        if kind == EventKind::MouseLeftPress {
             ctrl = w_param & 0x0008 /*MK_CONTROL*/ != 0;
             shift = w_param & 0x0004 /*MK_SHIFT*/ != 0;
         }
@@ -351,7 +355,7 @@ impl Control {
             let widget = &mut self.widgets[scope.widget];
             let mut event = event_.scope(widget.rect);
 
-            if event.kind == EventKind::MousePress && widget.config.listen_double_click {
+            if event.kind == EventKind::MouseLeftPress && widget.config.listen_double_click {
                 let current = Instant::now();
                 if let Some((clicked_i, time, cx, cy)) = self.clicked {
                     let delta = current.duration_since(time);
