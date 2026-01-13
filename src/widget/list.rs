@@ -767,10 +767,22 @@ impl super::Widget for ModListWidget {
                 }
             }
 
-            EventKind::KeyDown(KeyKind::Space) => {
-                if self.toggle_selected() {
-                    self.update_mod_lorder();
-                    control.redraw();
+            EventKind::KeyDown(key) => {
+                match key {
+                    KeyKind::Space => {
+                        if self.toggle_selected() {
+                            self.update_mod_lorder();
+                            control.redraw();
+                        }
+                    }
+                    KeyKind::Escape => {
+                        self.mouse_hover_y = Some(y);
+                        self.dropdown_defer = false;
+                        self.clicked_mod = None;
+                        self.mouse_drag_y = None;
+                        self.select_defer = None;
+                        control.redraw();
+                    }
                 }
             }
 
