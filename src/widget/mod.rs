@@ -392,11 +392,13 @@ impl Control {
     fn handle_events(&mut self) {
         let mut events = core::mem::take(&mut self.events);
         let mut capture = None;
+        let mut redraw = false;
         for event in events.drain(..) {
             match event {
                 WidgetEvent::Toggle(widget) => {
                     let widget = &mut self.widgets[widget];
                     widget.visible = !widget.visible;
+                    redraw = true;
                 }
                 WidgetEvent::Move(client, widget, x, y) => {
                     let client = &self.widgets[client];
@@ -416,12 +418,7 @@ impl Control {
                     }
                 }
                 WidgetEvent::CaptureMouse(capture_) => capture = Some(capture_),
-                WidgetEvent::Redraw => {
-                    if !self.dirty {
-                        self.dirty = true;
-                        update_display(&self.display);
-                    }
-                }
+                WidgetEvent::Redraw => redraw = true,
             }
         }
         self.events = events;
@@ -430,6 +427,11 @@ impl Control {
             && capture != self.capture_mouse
         {
             self.capture_mouse = capture;
+        }
+
+        if redraw && !self.dirty {
+            self.dirty = true;
+            update_display(&self.display);
         }
     }
 
