@@ -193,6 +193,14 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     let mut widgets = Some((button, mod_list));
 
     hook::hook_ulw(Box::new(move |hwnd, org_info| {
+        // TODO: blur and dim widgets when settings are open
+        if let Some(control) = &mut *widget::CONTROL.lock().unwrap()
+            && hwnd != control.display // !control.is_hooked_hwnd(hwnd)
+        {
+            hook::update_layered_window_indirect(hwnd, org_info);
+            return;
+        }
+
         let mut rect;
         unsafe {
             rect = core::mem::zeroed();

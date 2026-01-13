@@ -163,7 +163,7 @@ impl WidgetState {
 
 pub struct Control {
     hwnd: HWND,
-    display: HWND,
+    pub display: HWND,
     capture_mouse: Option<usize>,
     last: Option<usize>,
     widgets: Vec<WidgetState>,
