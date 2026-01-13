@@ -11,6 +11,7 @@ use crate::dxgi::DrawScope;
 
 pub mod button;
 pub mod list;
+pub mod dropdown;
 
 pub trait Widget: Send + 'static {
     fn config(&self) -> WidgetConfig {
@@ -18,6 +19,10 @@ pub trait Widget: Send + 'static {
     }
 
     fn rect(&self, width: u32, height: u32) -> [u32; 4];
+
+    fn hit_test(&self, _x: u32, _y: u32) -> bool {
+        true
+    }
 
     fn handle_event(
         &mut self,
@@ -34,8 +39,14 @@ pub struct WidgetConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CustomEvent {
+    Open,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum KeyKind {
     Space,
+    Escape,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,7 +61,16 @@ pub enum EventKind {
     MouseEnter,
     MouseLeave,
     KeyDown(KeyKind),
-    //LostFocus,
+    LostFocus,
+    Show,
+    Hide,
+    Custom(CustomEvent),
+}
+
+impl From<CustomEvent> for EventKind {
+    fn from(ce: CustomEvent) -> EventKind {
+        EventKind::Custom(ce)
+    }
 }
 
 #[derive(Clone)]
@@ -83,6 +103,7 @@ impl Event {
                 };
                 let kind = match VIRTUAL_KEY(key) {
                     VK_SPACE => KeyKind::Space,
+                    VK_ESCAPE => KeyKind::Escape,
                     _ => return None,
                 };
                 EventKind::KeyDown(kind)
@@ -92,7 +113,9 @@ impl Event {
 
         let mut ctrl = false;
         let mut shift = false;
-        if kind == EventKind::MouseLeftPress {
+        if kind == EventKind::MouseLeftPress
+            || kind == EventKind::MouseRightPress
+        {
             ctrl = w_param & 0x0008 /*MK_CONTROL*/ != 0;
             shift = w_param & 0x0004 /*MK_SHIFT*/ != 0;
         }
@@ -141,9 +164,12 @@ impl Event {
 
 enum WidgetEvent {
     Toggle(usize),
+    Hide(usize),
+    Show(usize),
     Move(usize, usize, i32, i32),
     Resize(usize, u32, u32),
     CaptureMouse(Option<usize>),
+    SendEvent(usize, CustomEvent),
     Redraw,
 }
 
@@ -194,12 +220,14 @@ unsafe impl Sync for Control {}
 impl Control {
     pub const MOD_LIST_WIDGET: usize = 0;
     //pub const BUTTON_WIDGET: usize = 1;
+    pub const DROPDOWN_WIDGET: usize = 2;
 
     const WM_PRIV_MOUSE: u32 = WM_APP + 0x333;
 
     pub fn hook(
-        button: button::ButtonWidget,
         mod_list: list::ModListWidget,
+        button: button::ButtonWidget,
+        dropdown: dropdown::DropdownWidget,
         hwnd: HWND,
     ) {
         let mut control = CONTROL.lock().unwrap();
@@ -216,6 +244,7 @@ impl Control {
         let mut widgets = Vec::new();
         widgets.push(WidgetState::new(Box::new(mod_list), cfg!(debug_assertions)));
         widgets.push(WidgetState::new(Box::new(button), true));
+        widgets.push(WidgetState::new(Box::new(dropdown), false));
 
         for widget in &mut widgets {
             widget.rect = widget.inner.rect(width, height);
@@ -300,6 +329,7 @@ impl Control {
             let y1 = widget.rect[3];
             if x >= x0 && x < x1
                 && y >= y0 && y < y1
+                && widget.inner.hit_test(x - x0, y - y0)
             {
                 return Some(i);
             }
@@ -398,12 +428,29 @@ impl Control {
         let mut events = core::mem::take(&mut self.events);
         let mut capture = None;
         let mut redraw = false;
+        let mut post_events = Vec::new();
         for event in events.drain(..) {
             match event {
                 WidgetEvent::Toggle(widget) => {
                     let widget = &mut self.widgets[widget];
                     widget.visible = !widget.visible;
                     redraw = true;
+                }
+                WidgetEvent::Hide(target) => {
+                    let widget = &mut self.widgets[target];
+                    if widget.visible {
+                        widget.visible = false;
+                        redraw = true;
+                        post_events.push((target, EventKind::Hide));
+                    }
+                }
+                WidgetEvent::Show(target) => {
+                    let widget = &mut self.widgets[target];
+                    if !widget.visible {
+                        widget.visible = true;
+                        redraw = true;
+                        post_events.push((target, EventKind::Show));
+                    }
                 }
                 WidgetEvent::Move(client, widget, x, y) => {
                     let client = &self.widgets[client];
@@ -428,6 +475,7 @@ impl Control {
                     widget.rect[3] = widget.rect[1] + height;
                 }
                 WidgetEvent::CaptureMouse(capture_) => capture = Some(capture_),
+                WidgetEvent::SendEvent(target, event) => post_events.push((target, event.into())),
                 WidgetEvent::Redraw => redraw = true,
             }
         }
@@ -436,7 +484,34 @@ impl Control {
         if let Some(capture) = capture
             && capture != self.capture_mouse
         {
+            if let Some(old) = self.capture_mouse {
+                post_events.push((old, EventKind::LostFocus));
+            }
             self.capture_mouse = capture;
+        }
+
+        if !post_events.is_empty() {
+            let mut scope = ControlScope {
+                widget: 0,
+                events: &mut self.events,
+            };
+
+            let mut event = Event {
+                kind: EventKind::LostFocus,
+                ctrl: false,
+                shift: false,
+                x: -1,
+                y: -1,
+            };
+
+            for (target, kind) in post_events {
+                scope.widget = target;
+                event.kind = kind;
+                let widget = &mut self.widgets[scope.widget];
+                widget.inner.handle_event(&mut scope, event.clone());
+            }
+
+            self.handle_events();
         }
 
         if redraw && !self.dirty {
@@ -485,12 +560,25 @@ impl<'a> ControlScope<'a> {
         self.events.push(WidgetEvent::Move(self.widget, widget, x, y));
     }
 
+    #[allow(dead_code)]
     pub fn resize_widget(&mut self, widget: usize, width: u32, height: u32) {
         self.events.push(WidgetEvent::Resize(widget, width, height));
     }
 
     pub fn toggle_widget(&mut self, widget: usize) {
         self.events.push(WidgetEvent::Toggle(widget));
+    }
+
+    pub fn hide_widget(&mut self, widget: usize) {
+        self.events.push(WidgetEvent::Hide(widget));
+    }
+
+    pub fn show_widget(&mut self, widget: usize) {
+        self.events.push(WidgetEvent::Show(widget));
+    }
+
+    pub fn send_event(&mut self, target: usize, event: CustomEvent) {
+        self.events.push(WidgetEvent::SendEvent(target, event));
     }
 
     pub fn redraw(&mut self) {

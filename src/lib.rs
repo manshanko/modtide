@@ -12,6 +12,7 @@ mod dxgi;
 mod panic;
 mod widget;
 use widget::button::ButtonWidget;
+use widget::dropdown::DropdownWidget;
 use widget::list::ModListWidget;
 mod mod_engine;
 
@@ -181,6 +182,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         //    windows::Win32::Graphics::DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT_CENTER).unwrap();
     }
 
+    let dropdown = DropdownWidget::new(brush.clone(), text_format.clone());
     let button = ButtonWidget::new(button_active, button_idle);
     let mut mod_list = ModListWidget::new(
         root.join("mods"),
@@ -190,7 +192,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(err) = mod_list.mount() {
         eprintln!("failed mod list mount: {err:?}");
     }
-    let mut widgets = Some((button, mod_list));
+    let mut widgets = Some((mod_list, button, dropdown));
 
     hook::hook_ulw(Box::new(move |hwnd, org_info| {
         // TODO: blur and dim widgets when settings are open
@@ -261,7 +263,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if let Some(w) = widgets.take() {
-            widget::Control::hook(w.0, w.1, hwnd);
+            widget::Control::hook(w.0, w.1, w.2, hwnd);
         }
     })).unwrap();
 

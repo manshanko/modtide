@@ -7,6 +7,7 @@ use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
 
 use crate::mod_engine::ModEngine;
 use crate::mod_engine::ModState;
+use super::Control;
 use super::WidgetConfig;
 use super::button;
 use super::button::ButtonWidget;
@@ -32,6 +33,7 @@ pub struct ModListWidget {
     selected: Vec<usize>,
     selected_pivot: usize,
     select_defer: Option<bool>,
+    dropdown_defer: bool,
 }
 
 impl ModListWidget {
@@ -100,6 +102,7 @@ impl ModListWidget {
             selected: Vec::new(),
             selected_pivot: 0,
             select_defer: None,
+            dropdown_defer: false,
         }
     }
 
@@ -503,15 +506,17 @@ impl super::Widget for ModListWidget {
                 }
             }
 
-            EventKind::MouseLeftRelease => {
+            EventKind::MouseLeftRelease
+            | EventKind::MouseRightRelease => {
+                let is_right = event.kind == EventKind::MouseRightRelease;
                 if let Some(clicked) = self.clicked_mod {
                     control.release_mouse();
                     if self.mouse_drag_y.is_none()
                         && let Entry::Mod(entry) = self.get_entry(y)
                         && entry == clicked
                     {
-                        if let Some(is_ctrl) = self.select_defer.take() {
-                            if is_ctrl {
+                        if let Some(no_clear) = self.select_defer.take() {
+                            if no_clear {
                                 let check = self.selected.iter()
                                     .enumerate()
                                     .find(|(_, c)| **c == clicked);
@@ -525,6 +530,7 @@ impl super::Widget for ModListWidget {
                                 self.selected.clear();
                                 self.selected.push(clicked);
                             }
+
                             control.redraw();
                         }
                     } else {
@@ -535,8 +541,18 @@ impl super::Widget for ModListWidget {
                         }
                     }
                 }
+
+                if self.dropdown_defer && is_right {
+                    self.mouse_hover_y = None;
+                    control.move_widget(Control::DROPDOWN_WIDGET, x, y);
+                    control.show_widget(Control::DROPDOWN_WIDGET);
+                    control.redraw();
+                }
+
+                self.dropdown_defer = false;
                 self.clicked_mod = None;
                 self.mouse_drag_y = None;
+                self.select_defer = None;
 
                 if self.update_mouse_hover(is_inside.then_some(y)) {
                     control.redraw();
@@ -549,14 +565,43 @@ impl super::Widget for ModListWidget {
             //    self.mouse_hover_mod = None;
             //}
 
-            EventKind::MouseLeftPress => {
+            EventKind::MouseLeftPress
+            | EventKind::MouseRightPress => {
+                let is_right = event.kind == EventKind::MouseRightPress;
                 if is_inside {
                     self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(y) {
                         if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {
                             self.selected.clear();
                         }
 
-                        if event.shift {
+                        if is_right {
+                            self.dropdown_defer = true;
+                            if event.ctrl {
+                                if !event.shift {
+                                    self.selected_pivot = clicked;
+                                }
+                            } else if !self.selected.contains(&clicked) {
+                                if event.shift {
+                                    self.select_defer = Some(false);
+                                } else {
+                                    self.selected.clear();
+                                    self.selected.push(clicked);
+                                }
+                            }
+                        } else if self.dropdown_defer {
+                            self.dropdown_defer = false;
+                            self.select_defer = None;
+
+                            if event.shift {
+                                self.selected.clear();
+                                self.selected.push(clicked);
+                            }
+
+                            self.mouse_hover_y = None;
+                            control.move_widget(Control::DROPDOWN_WIDGET, x, y);
+                            control.show_widget(Control::DROPDOWN_WIDGET);
+                            control.redraw();
+                        } else if event.shift {
                             let min = self.selected_pivot.min(clicked);
                             let max = self.selected_pivot.max(clicked);
 
@@ -578,12 +623,9 @@ impl super::Widget for ModListWidget {
                             }
                         } else {
                             self.selected_pivot = clicked;
-                            let check = self.selected.iter()
-                                .enumerate()
-                                .find(|(_, c)| **c == clicked);
-
-                            self.select_defer = (check.is_some() || event.ctrl).then_some(event.ctrl);
-                            if self.select_defer.is_none() {
+                            if self.selected.contains(&clicked) || event.ctrl {
+                                self.select_defer = Some(event.ctrl);
+                            } else {
                                 self.selected.push(clicked);
                             }
                         }
@@ -674,6 +716,8 @@ impl super::Widget for ModListWidget {
                     control.redraw();
                 }
             }
+
+            EventKind::Hide => control.hide_widget(Control::DROPDOWN_WIDGET),
 
             _ => (),
         }
