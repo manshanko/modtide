@@ -138,6 +138,7 @@ impl Event {
 enum WidgetEvent {
     Toggle(usize),
     Move(usize, usize, i32, i32),
+    Resize(usize, u32, u32),
     CaptureMouse(Option<usize>),
     Redraw,
 }
@@ -417,6 +418,11 @@ impl Control {
                         ];
                     }
                 }
+                WidgetEvent::Resize(widget, width, height) => {
+                    let widget = &mut self.widgets[widget];
+                    widget.rect[2] = widget.rect[0] + width;
+                    widget.rect[3] = widget.rect[1] + height;
+                }
                 WidgetEvent::CaptureMouse(capture_) => capture = Some(capture_),
                 WidgetEvent::Redraw => redraw = true,
             }
@@ -473,6 +479,10 @@ impl<'a> ControlScope<'a> {
 
     pub fn move_widget(&mut self, widget: usize, x: i32, y: i32) {
         self.events.push(WidgetEvent::Move(self.widget, widget, x, y));
+    }
+
+    pub fn resize_widget(&mut self, widget: usize, width: u32, height: u32) {
+        self.events.push(WidgetEvent::Resize(widget, width, height));
     }
 
     pub fn toggle_widget(&mut self, widget: usize) {
