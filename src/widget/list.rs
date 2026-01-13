@@ -489,7 +489,7 @@ impl super::Widget for ModListWidget {
                     && let entry = self.get_entry(y)
                     && (entry != Entry::Mod(clicked) || entry == Entry::None)
                 {
-                    self.mouse_hover_y = Some(y);
+                    self.mouse_hover_y = None;
                     self.mouse_drag_y = Some(y);
                 } else if is_inside {
                     self.mouse_hover_y = match self.get_entry(y) {
@@ -536,6 +536,14 @@ impl super::Widget for ModListWidget {
                     } else {
                         let (swap_to, _) = self.get_slot(y);
                         if self.move_selected(swap_to) {
+                            if clicked < swap_to {
+                                self.selected_pivot = swap_to - 1;
+                            } else {
+                                self.selected_pivot = swap_to;
+                            }
+                            if is_inside {
+                                self.mouse_hover_y = Some(y);
+                            }
                             self.update_mod_lorder();
                             control.redraw();
                         }
