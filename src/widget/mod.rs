@@ -137,6 +137,7 @@ impl Event {
 
 enum WidgetEvent {
     Toggle(usize),
+    Move(usize, usize, i32, i32),
     CaptureMouse(Option<usize>),
     Redraw,
 }
@@ -213,6 +214,8 @@ impl Control {
 
         for widget in &mut widgets {
             widget.rect = widget.inner.rect(width, height);
+            assert!(widget.rect[0] <= widget.rect[2]);
+            assert!(widget.rect[1] <= widget.rect[3]);
         }
 
         let mut hooks = Vec::new();
@@ -279,7 +282,9 @@ impl Control {
         let x = u32::try_from(x).ok()?;
         let y = u32::try_from(y).ok()?;
 
-        for (i, widget) in self.widgets.iter().enumerate() {
+        for i in 0..self.widgets.len() {
+            let i = self.widgets.len() - 1 - i;
+            let widget = &self.widgets[i];
             if !widget.visible {
                 continue;
             }
@@ -393,6 +398,23 @@ impl Control {
                     let widget = &mut self.widgets[widget];
                     widget.visible = !widget.visible;
                 }
+                WidgetEvent::Move(client, widget, x, y) => {
+                    let client = &self.widgets[client];
+                    let x0 = x + client.rect[0] as i32;
+                    let y0 = y + client.rect[1] as i32;
+
+                    let widget = &mut self.widgets[widget];
+                    let x1 = x0 + (widget.rect[2] - widget.rect[0]) as i32;
+                    let y1 = y0 + (widget.rect[3] - widget.rect[1]) as i32;
+                    if x0 >= 0 && y0 >= 0 {
+                        widget.rect = [
+                            x0 as u32,
+                            y0 as u32,
+                            x1 as u32,
+                            y1 as u32,
+                        ];
+                    }
+                }
                 WidgetEvent::CaptureMouse(capture_) => capture = Some(capture_),
                 WidgetEvent::Redraw => {
                     if !self.dirty {
@@ -447,9 +469,8 @@ impl<'a> ControlScope<'a> {
         self.events.push(WidgetEvent::CaptureMouse(None));
     }
 
-    #[allow(dead_code)]
-    pub fn toggle_self(&mut self) {
-        self.toggle_widget(self.widget);
+    pub fn move_widget(&mut self, widget: usize, x: i32, y: i32) {
+        self.events.push(WidgetEvent::Move(self.widget, widget, x, y));
     }
 
     pub fn toggle_widget(&mut self, widget: usize) {
