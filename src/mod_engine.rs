@@ -188,6 +188,10 @@ impl ModEntry {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
