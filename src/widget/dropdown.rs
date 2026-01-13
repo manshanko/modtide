@@ -103,7 +103,10 @@ impl super::Widget for DropdownWidget {
         'control: {
             match event.kind {
                 EventKind::Show => control.capture_mouse(),
-                EventKind::Hide => control.release_mouse(),
+                EventKind::Hide => {
+                    self.hovered_option = None;
+                    control.release_mouse();
+                }
                 EventKind::LostFocus => control.hide_widget(Control::DROPDOWN_WIDGET),
                 EventKind::Custom(msg) => {
                     if let Some(menu) = DropdownMenu::from_u32(msg) {
