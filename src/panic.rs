@@ -5,12 +5,14 @@ type Callback = dyn FnOnce() + Send + 'static;
 static UNWIND_CALLBACKS: Mutex<Vec<Box<Callback>>> = Mutex::new(Vec::new());
 
 pub fn init() {
-    panic::set_hook(Box::new(|_info| {
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
         if let Ok(mut callbacks) = UNWIND_CALLBACKS.lock() {
             for cb in callbacks.drain(..) {
                 cb();
             }
         }
+        default_hook(info)
     }));
 }
 
