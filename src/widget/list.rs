@@ -586,6 +586,7 @@ impl super::Widget for ModListWidget {
                 }
             }
 
+            EventKind::MouseLeftRelease if self.dropdown_defer => (),
             EventKind::MouseLeftRelease
             | EventKind::MouseRightRelease => {
                 let is_right = event.kind == EventKind::MouseRightRelease;
@@ -613,6 +614,12 @@ impl super::Widget for ModListWidget {
 
                             control.redraw();
                         }
+
+                        if self.dropdown_defer && is_right {
+                            self.mouse_hover_y = None;
+                            DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
+                            control.redraw();
+                        }
                     } else {
                         let (swap_to, _) = self.get_slot(y);
                         if self.move_selected(swap_to) {
@@ -630,16 +637,9 @@ impl super::Widget for ModListWidget {
                     }
                 }
 
-                if self.dropdown_defer
-                    && is_right
-                    && self.mouse_drag_y.is_none()
-                {
-                    self.mouse_hover_y = None;
-                    DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
-                    control.redraw();
+                if event.kind == EventKind::MouseRightRelease {
+                    self.dropdown_defer = false;
                 }
-
-                self.dropdown_defer = false;
                 self.clicked_mod = None;
                 self.mouse_drag_y = None;
                 self.select_defer = None;
@@ -655,6 +655,7 @@ impl super::Widget for ModListWidget {
             //    self.mouse_hover_mod = None;
             //}
 
+            EventKind::MouseLeftPress if self.dropdown_defer => (),
             EventKind::MouseLeftPress
             | EventKind::MouseRightPress => {
                 let is_right = event.kind == EventKind::MouseRightPress;
@@ -666,30 +667,26 @@ impl super::Widget for ModListWidget {
 
                         if is_right {
                             self.dropdown_defer = true;
-                            if event.ctrl {
-                                if !event.shift {
+                            if !event.ctrl || event.shift {
+                                self.selected_pivot = clicked;
+                                if !self.selected.contains(&clicked) {
                                     self.selected_pivot = clicked;
-                                }
-                            } else if !self.selected.contains(&clicked) {
-                                if event.shift {
-                                    self.select_defer = Some(false);
-                                } else {
                                     self.selected.clear();
                                     self.selected.push(clicked);
                                 }
                             }
-                        } else if self.dropdown_defer {
-                            self.dropdown_defer = false;
-                            self.select_defer = None;
-
-                            if event.shift {
-                                self.selected.clear();
-                                self.selected.push(clicked);
-                            }
-
-                            self.mouse_hover_y = None;
-                            DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
-                            control.redraw();
+                        //} else if self.dropdown_defer {
+                        //    self.dropdown_defer = false;
+                        //    self.select_defer = None;
+                        //
+                        //    if event.shift {
+                        //        self.selected.clear();
+                        //        self.selected.push(clicked);
+                        //    }
+                        //
+                        //    self.mouse_hover_y = None;
+                        //    DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
+                        //    control.redraw();
                         } else if event.shift {
                             let min = self.selected_pivot.min(clicked);
                             let max = self.selected_pivot.max(clicked);
@@ -738,6 +735,7 @@ impl super::Widget for ModListWidget {
 
             EventKind::MouseDoubleClick => {
                 if is_inside
+                    && !self.dropdown_defer
                     && let Entry::Mod(entry) = self.get_entry(y)
                     && self.toggle_mod(entry, None)
                 {
