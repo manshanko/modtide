@@ -154,6 +154,15 @@ impl Event {
         }
     }
 
+    fn breaks_capture(&self) -> Option<bool> {
+        Some(match self.kind {
+            EventKind::MouseLeftPress
+            | EventKind::MouseRightPress => false,
+            EventKind::KeyDown(KeyKind::Escape) => true,
+            _ => return None,
+        })
+    }
+
     fn scope(&self, rect: [u32; 4]) -> Self {
         let mut out = self.clone();
         out.x -= rect[0] as i32;
@@ -353,12 +362,12 @@ impl Control {
             return false;
         }
 
-        let mut scope = ControlScope {
-            widget: 0,
-            events: &mut self.events,
-        };
-
         if self.last != target {
+            let mut scope = ControlScope {
+                widget: 0,
+                events: &mut self.events,
+            };
+
             if let Some(last) = self.last {
                 scope.widget = last;
                 let widget = &mut self.widgets[scope.widget];
@@ -378,10 +387,20 @@ impl Control {
             }
         }
 
+        if let Some(force) = event_.breaks_capture()
+            && (force || self.capture_mouse != target)
+        {
+            self.lost_focus();
+        }
+
         target = self.capture_mouse.or(target);
 
         if let Some(i) = target {
-            scope.widget = i;
+            let mut scope = ControlScope {
+                widget: i,
+                events: &mut self.events,
+            };
+
             let widget = &mut self.widgets[scope.widget];
             let mut event = event_.scope(widget.rect);
 
@@ -526,7 +545,7 @@ impl Control {
             events: &mut self.events,
         };
 
-        if let Some(i) = self.capture_mouse {
+        if let Some(i) = self.capture_mouse.take() {
             let widget = &mut self.widgets[i];
             scope.widget = i;
             let event = Event {

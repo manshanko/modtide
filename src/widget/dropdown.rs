@@ -4,7 +4,6 @@ use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
 use super::Control;
 use super::Event;
 use super::EventKind;
-use super::KeyKind;
 use super::CustomEvent;
 
 static MENU: &[&[(&str, CustomEvent)]] = &[
@@ -109,11 +108,6 @@ impl super::Widget for DropdownWidget {
                 }
                 control.hide_widget(Control::DROPDOWN_WIDGET);
             }
-
-            EventKind::MouseLeftPress
-            | EventKind::MouseRightPress
-            | EventKind::KeyDown(KeyKind::Escape)
-                if !is_inside => control.hide_widget(Control::DROPDOWN_WIDGET),
 
             _ => (),
         }
