@@ -133,8 +133,7 @@ impl super::Widget for ButtonWidget {
                 EventKind::MouseRelease => {
                     control.release_mouse();
                     if old == Mode::Active {
-                        // TODO: properly identify widget instead of using magic variable
-                        control.toggle_widget(1);
+                        control.toggle_widget(super::Control::MOD_LIST_WIDGET);
                     }
                 }
                 EventKind::MousePress => control.capture_mouse(),

@@ -159,30 +159,6 @@ impl WidgetState {
     }
 }
 
-pub struct ControlBuilder {
-    widgets: Vec<WidgetState>,
-}
-
-impl ControlBuilder {
-    pub fn new() -> Self {
-        Self {
-            widgets: Vec::new(),
-        }
-    }
-
-    pub fn add_widget(
-        &mut self,
-        widget: impl Widget,
-        visible: bool,
-    ) {
-        self.widgets.push(WidgetState::new(Box::new(widget), visible));
-    }
-
-    pub fn hook(self, hwnd: HWND) {
-        Control::hook(self, hwnd)
-    }
-}
-
 pub struct Control {
     hwnd: HWND,
     display: HWND,
@@ -210,10 +186,14 @@ unsafe impl Send for Control {}
 unsafe impl Sync for Control {}
 
 impl Control {
+    pub const MOD_LIST_WIDGET: usize = 0;
+    //pub const BUTTON_WIDGET: usize = 1;
+
     const WM_PRIV_MOUSE: u32 = WM_APP + 0x333;
 
-    fn hook(
-        mut builder: ControlBuilder,
+    pub fn hook(
+        button: button::ButtonWidget,
+        mod_list: list::ModListWidget,
         hwnd: HWND,
     ) {
         let mut control = CONTROL.lock().unwrap();
@@ -227,7 +207,11 @@ impl Control {
         let width = u32::try_from(rect.right - rect.left).unwrap();
         let height = u32::try_from(rect.bottom - rect.top).unwrap();
 
-        for widget in &mut builder.widgets {
+        let mut widgets = Vec::new();
+        widgets.push(WidgetState::new(Box::new(mod_list), cfg!(debug_assertions)));
+        widgets.push(WidgetState::new(Box::new(button), true));
+
+        for widget in &mut widgets {
             widget.rect = widget.inner.rect(width, height);
         }
 
@@ -275,7 +259,7 @@ impl Control {
             display: display.unwrap_or(hwnd),
             capture_mouse: None,
             last: None,
-            widgets: builder.widgets,
+            widgets,
             events: Vec::new(),
 
             dirty: false,

@@ -181,9 +181,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         //    windows::Win32::Graphics::DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT_CENTER).unwrap();
     }
 
-    let mut builder = widget::ControlBuilder::new();
     let button = ButtonWidget::new(button_active, button_idle);
-    builder.add_widget(button, true);
     let mut mod_list = ModListWidget::new(
         root.join("mods"),
         background,
@@ -192,8 +190,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(err) = mod_list.mount() {
         eprintln!("failed mod list mount: {err:?}");
     }
-    builder.add_widget(mod_list, cfg!(debug_assertions));
-    let mut builder = Some(builder);
+    let mut widgets = Some((button, mod_list));
 
     hook::hook_ulw(Box::new(move |hwnd, org_info| {
         let mut rect;
@@ -255,8 +252,8 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        if let Some(b) = builder.take() {
-            b.hook(hwnd);
+        if let Some(w) = widgets.take() {
+            widget::Control::hook(w.0, w.1, hwnd);
         }
     })).unwrap();
 
