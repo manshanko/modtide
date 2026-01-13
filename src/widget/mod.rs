@@ -520,26 +520,27 @@ impl Control {
         }
     }
 
-    //pub fn lost_focus(&mut self) {
-    //    let mut scope = ControlScope {
-    //        widget: 0,
-    //        events: &mut self.events,
-    //    };
-    //
-    //    for (i, widget) in self.widgets.iter_mut().enumerate() {
-    //        scope.widget = i;
-    //        let event = Event {
-    //            kind: EventKind::LostFocus,
-    //            ctrl: false,
-    //            shift: false,
-    //            x: -1,
-    //            y: -1,
-    //        };
-    //        widget.inner.handle_event(&mut scope, event);
-    //    }
-    //
-    //    self.handle_events();
-    //}
+    fn lost_focus(&mut self) {
+        let mut scope = ControlScope {
+            widget: 0,
+            events: &mut self.events,
+        };
+
+        if let Some(i) = self.capture_mouse {
+            let widget = &mut self.widgets[i];
+            scope.widget = i;
+            let event = Event {
+                kind: EventKind::LostFocus,
+                ctrl: false,
+                shift: false,
+                x: -1,
+                y: -1,
+            };
+            widget.inner.handle_event(&mut scope, event);
+        }
+
+        self.handle_events();
+    }
 }
 
 pub struct ControlScope<'a> {
@@ -622,6 +623,8 @@ unsafe extern "system" fn wnd_proc(
             } else if Event::can_capture(msg) && control.capture_mouse.is_some() {
                 return None;
             }
+        } else if msg == WM_KILLFOCUS {
+            control.lost_focus();
         } else if msg == WM_NCDESTROY {
             for (i, (check, _)) in control.hooks.iter().enumerate() {
                 if *check == hwnd {
