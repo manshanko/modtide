@@ -39,11 +39,6 @@ pub struct WidgetConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum CustomEvent {
-    Open,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum KeyKind {
     Space,
     Escape,
@@ -64,13 +59,7 @@ pub enum EventKind {
     LostFocus,
     Show,
     Hide,
-    Custom(CustomEvent),
-}
-
-impl From<CustomEvent> for EventKind {
-    fn from(ce: CustomEvent) -> EventKind {
-        EventKind::Custom(ce)
-    }
+    Custom(u32),
 }
 
 #[derive(Clone)]
@@ -178,7 +167,7 @@ enum WidgetEvent {
     Move(usize, usize, i32, i32),
     Resize(usize, u32, u32),
     CaptureMouse(Option<usize>),
-    SendEvent(usize, CustomEvent),
+    SendEvent(usize, u32),
     Redraw,
 }
 
@@ -494,7 +483,7 @@ impl Control {
                     widget.rect[3] = widget.rect[1] + height;
                 }
                 WidgetEvent::CaptureMouse(capture_) => capture = Some(capture_),
-                WidgetEvent::SendEvent(target, event) => post_events.push((target, event.into())),
+                WidgetEvent::SendEvent(target, event) => post_events.push((target, EventKind::Custom(event))),
                 WidgetEvent::Redraw => redraw = true,
             }
         }
@@ -597,7 +586,7 @@ impl<'a> ControlScope<'a> {
         self.events.push(WidgetEvent::Show(widget));
     }
 
-    pub fn send_event(&mut self, target: usize, event: CustomEvent) {
+    pub fn send_event(&mut self, target: usize, event: u32) {
         self.events.push(WidgetEvent::SendEvent(target, event));
     }
 

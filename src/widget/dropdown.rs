@@ -1,14 +1,32 @@
 use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
 use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
 
+use super::list::ModListEvent;
+use super::list::ModListWidget;
 use super::Control;
+use super::ControlScope;
 use super::Event;
 use super::EventKind;
-use super::CustomEvent;
 
-static MENU: &[&[(&str, CustomEvent)]] = &[
-    &[("Browse", CustomEvent::Open)]
+static MENU: &[&[(&str, ModListEvent)]] = &[
+    &[
+        ("Toggle", ModListEvent::ToggleSelected),
+        ("Browse", ModListEvent::OpenSelected),
+    ]
 ];
+
+pub enum DropdownMenu {
+    ModSelected = 0,
+}
+
+impl DropdownMenu {
+    fn from_u32(msg: u32) -> Option<Self> {
+        Some(match msg {
+            0 => DropdownMenu::ModSelected,
+            _ => return None,
+        })
+    }
+}
 
 pub struct DropdownWidget {
     brush: ID2D1SolidColorBrush,
@@ -47,7 +65,17 @@ impl DropdownWidget {
         }
     }
 
-    fn menu(&self) -> &[(&str, CustomEvent)] {
+    pub fn show(control: &mut ControlScope, x: i32, y: i32, menu: DropdownMenu) {
+        control.send_event(Control::DROPDOWN_WIDGET, menu as u32);
+        control.move_widget(Control::DROPDOWN_WIDGET, x, y);
+        control.show_widget(Control::DROPDOWN_WIDGET);
+    }
+
+    pub fn hide(control: &mut ControlScope) {
+        control.hide_widget(Control::DROPDOWN_WIDGET);
+    }
+
+    fn menu(&self) -> &[(&str, ModListEvent)] {
         MENU.get(self.menu).cloned().unwrap_or(&[])
     }
 }
@@ -69,7 +97,7 @@ impl super::Widget for DropdownWidget {
 
     fn handle_event(
         &mut self,
-        control: &mut super::ControlScope,
+        control: &mut ControlScope,
         event: Event,
     ) {
         'control: {
@@ -77,6 +105,11 @@ impl super::Widget for DropdownWidget {
                 EventKind::Show => control.capture_mouse(),
                 EventKind::Hide => control.release_mouse(),
                 EventKind::LostFocus => control.hide_widget(Control::DROPDOWN_WIDGET),
+                EventKind::Custom(msg) => {
+                    if let Some(menu) = DropdownMenu::from_u32(msg) {
+                        self.menu = menu as usize;
+                    }
+                }
                 _ => break 'control,
             }
             return;
@@ -104,9 +137,9 @@ impl super::Widget for DropdownWidget {
                 let offset = y as u32 - Self::BORDER_SIZE;
                 let opt = (offset / Self::ENTRY_HEIGHT) as usize;
                 if let Some((_, event)) = menu.get(opt) {
-                    control.send_event(Control::MOD_LIST_WIDGET, *event);
+                    ModListWidget::send(control, event.clone());
                 }
-                control.hide_widget(Control::DROPDOWN_WIDGET);
+                DropdownWidget::hide(control);
             }
 
             _ => (),

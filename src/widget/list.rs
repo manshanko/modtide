@@ -11,9 +11,27 @@ use super::Control;
 use super::WidgetConfig;
 use super::button;
 use super::button::ButtonWidget;
+use super::dropdown::DropdownMenu;
+use super::dropdown::DropdownWidget;
 use super::Event;
 use super::EventKind;
 use super::KeyKind;
+
+#[derive(Clone)]
+pub enum ModListEvent {
+    ToggleSelected = 0,
+    OpenSelected = 1,
+}
+
+impl ModListEvent {
+    fn from_u32(msg: u32) -> Option<Self> {
+        Some(match msg {
+            0 => ModListEvent::ToggleSelected,
+            1 => ModListEvent::OpenSelected,
+            _ => return None,
+        })
+    }
+}
 
 pub struct ModListWidget {
     background: ID2D1Bitmap,
@@ -329,6 +347,46 @@ impl ModListWidget {
         true
     }
 
+    fn toggle_selected(&mut self) -> bool {
+        if !self.selected.is_empty() {
+            let mods = &mut self.lorder.mods;
+            let mut all_enabled = true;
+            for i in &self.selected {
+                if let Some(m) = mods.get(*i) {
+                    if self.using_aml {
+                        match m.state {
+                            ModState::Enabled
+                            | ModState::MissingEntry => (),
+                            ModState::Disabled => all_enabled = false,
+                            ModState::NotInstalled => (),
+                        }
+                    } else {
+                        match m.state {
+                            ModState::Enabled => (),
+                            ModState::Disabled => all_enabled = false,
+                            ModState::MissingEntry => (),
+                            ModState::NotInstalled => (),
+                        }
+                    };
+                }
+            }
+
+            for i in &self.selected {
+                if let Some(m) = mods.get_mut(*i) {
+                    match (all_enabled, m.state.clone()) {
+                        (true, ModState::Enabled) => m.state = ModState::Disabled,
+                        (false, ModState::Disabled) => m.state = ModState::Enabled,
+                        _ => (),
+                    }
+                }
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
     fn draw_mod(
         &self,
         context: &mut super::DrawScope,
@@ -429,6 +487,13 @@ impl ModListWidget {
         }
         false
     }
+
+    pub fn send(
+        control: &mut super::ControlScope,
+        event: ModListEvent,
+    ) {
+        control.send_event(Control::MOD_LIST_WIDGET, event as u32);
+    }
 }
 
 #[derive(PartialEq)]
@@ -460,6 +525,21 @@ impl super::Widget for ModListWidget {
         control: &mut super::ControlScope,
         event: Event,
     ) {
+        if let EventKind::Custom(custom) = event.kind {
+            if let Some(event) = ModListEvent::from_u32(custom) {
+                match event {
+                    ModListEvent::ToggleSelected => {
+                        if self.toggle_selected() {
+                            self.update_mod_lorder();
+                            control.redraw();
+                        }
+                    }
+                    ModListEvent::OpenSelected => {}
+                }
+            }
+            return;
+        }
+
         let x = event.x;
         let y = event.y;
 
@@ -555,8 +635,7 @@ impl super::Widget for ModListWidget {
                     && self.mouse_drag_y.is_none()
                 {
                     self.mouse_hover_y = None;
-                    control.move_widget(Control::DROPDOWN_WIDGET, x, y);
-                    control.show_widget(Control::DROPDOWN_WIDGET);
+                    DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
                     control.redraw();
                 }
 
@@ -609,8 +688,7 @@ impl super::Widget for ModListWidget {
                             }
 
                             self.mouse_hover_y = None;
-                            control.move_widget(Control::DROPDOWN_WIDGET, x, y);
-                            control.show_widget(Control::DROPDOWN_WIDGET);
+                            DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
                             control.redraw();
                         } else if event.shift {
                             let min = self.selected_pivot.min(clicked);
@@ -690,45 +768,13 @@ impl super::Widget for ModListWidget {
             }
 
             EventKind::KeyDown(KeyKind::Space) => {
-                if !self.selected.is_empty() {
-                    let mods = &mut self.lorder.mods;
-                    let mut all_enabled = true;
-                    for i in &self.selected {
-                        if let Some(m) = mods.get(*i) {
-                            if self.using_aml {
-                                match m.state {
-                                    ModState::Enabled
-                                    | ModState::MissingEntry => (),
-                                    ModState::Disabled => all_enabled = false,
-                                    ModState::NotInstalled => (),
-                                }
-                            } else {
-                                match m.state {
-                                    ModState::Enabled => (),
-                                    ModState::Disabled => all_enabled = false,
-                                    ModState::MissingEntry => (),
-                                    ModState::NotInstalled => (),
-                                }
-                            };
-                        }
-                    }
-
-                    for i in &self.selected {
-                        if let Some(m) = mods.get_mut(*i) {
-                            match (all_enabled, m.state.clone()) {
-                                (true, ModState::Enabled) => m.state = ModState::Disabled,
-                                (false, ModState::Disabled) => m.state = ModState::Enabled,
-                                _ => (),
-                            }
-                        }
-                    }
-
+                if self.toggle_selected() {
                     self.update_mod_lorder();
                     control.redraw();
                 }
             }
 
-            EventKind::Hide => control.hide_widget(Control::DROPDOWN_WIDGET),
+            EventKind::Hide => DropdownWidget::hide(control),
 
             _ => (),
         }
