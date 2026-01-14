@@ -336,6 +336,23 @@ impl Control {
         None
     }
 
+    fn mouse_leave(&mut self, event_: &Event) {
+        let Some(last) = self.last else {
+            return;
+        };
+
+        let mut scope = ControlScope {
+            widget: last,
+            events: &mut self.events,
+        };
+
+        let widget = &mut self.widgets[scope.widget];
+        let mut event = event_.scope(widget.rect);
+        event.kind = EventKind::MouseLeave;
+        widget.inner.handle_event(&mut scope, event);
+        self.last = None;
+    }
+
     fn handle_event(
         &mut self,
         event_: Event,
@@ -352,22 +369,14 @@ impl Control {
         }
 
         if self.last != target {
-            let mut scope = ControlScope {
-                widget: 0,
-                events: &mut self.events,
-            };
-
-            if let Some(last) = self.last {
-                scope.widget = last;
-                let widget = &mut self.widgets[scope.widget];
-                let mut event = event_.scope(widget.rect);
-                event.kind = EventKind::MouseLeave;
-                widget.inner.handle_event(&mut scope, event);
-                self.last = None;
-            }
+            self.mouse_leave(&event_);
 
             if let Some(i) = target {
-                scope.widget = i;
+                let mut scope = ControlScope {
+                    widget: i,
+                    events: &mut self.events,
+                };
+
                 let widget = &mut self.widgets[scope.widget];
                 let mut event = event_.scope(widget.rect);
                 event.kind = EventKind::MouseEnter;
