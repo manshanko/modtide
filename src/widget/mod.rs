@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
+use std::path::PathBuf;
 
 use windows::core::w;
 use windows::Win32::Foundation::*;
@@ -12,6 +13,7 @@ use crate::dxgi::DrawScope;
 pub mod button;
 pub mod list;
 pub mod dropdown;
+mod drop_target;
 
 pub trait Widget: Send + 'static {
     fn config(&self) -> WidgetConfig {
@@ -46,21 +48,28 @@ pub enum KeyKind {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EventKind {
-    MouseMove,
+    MouseMove(bool),
     MouseLeftPress,
     MouseLeftRelease,
     MouseRightPress,
     MouseRightRelease,
     MouseDoubleClick,
     MouseScroll(i32),
-    MouseEnter,
+    MouseEnter(bool),
     MouseLeave,
     KeyDown(KeyKind),
     LostFocus,
     Show,
     Hide,
+    DragDrop,
     Custom(u32),
     None,
+}
+
+impl EventKind {
+    fn is_dragdrop(&self) -> bool {
+        matches!(self, EventKind::MouseMove(true) | EventKind::DragDrop)
+    }
 }
 
 #[derive(Clone)]
@@ -77,8 +86,8 @@ impl Event {
         let kind = match msg {
             //WM_MOUSELEAVE
             //675 => EventKind::MouseMove,
-            WM_SETCURSOR => EventKind::MouseMove,
-            WM_MOUSEMOVE => EventKind::MouseMove,
+            WM_SETCURSOR => EventKind::MouseMove(false),
+            WM_MOUSEMOVE => EventKind::MouseMove(false),
             WM_LBUTTONDOWN => EventKind::MouseLeftPress,
             WM_LBUTTONUP => EventKind::MouseLeftRelease,
             WM_RBUTTONDOWN => EventKind::MouseRightPress,
@@ -216,6 +225,7 @@ pub struct Control {
     dbl_click_msec: Duration,
     dbl_click_width: i32,
     dbl_click_height: i32,
+    drag_files: Option<Vec<PathBuf>>,
 
     hooks: Vec<(HWND, unsafe extern "system" fn(
         hwnd: HWND,
@@ -234,6 +244,10 @@ impl Control {
     pub const DROPDOWN_WIDGET: usize = 2;
 
     const WM_PRIV_MOUSE: u32 = WM_APP + 0x333;
+    const WM_PRIV_MOUSELEAVE: u32 = WM_APP + 0x334;
+    const WM_PRIV_DRAGENTER: u32 = WM_APP + 0x335;
+    const WM_PRIV_DRAGMOVE: u32 = WM_APP + 0x336;
+    const WM_PRIV_DRAGDROP: u32 = WM_APP + 0x337;
 
     pub fn hook(
         mod_list: list::ModListWidget,
@@ -292,6 +306,7 @@ impl Control {
                 }
             }
         }
+        let display = display.unwrap_or(hwnd);
 
         let dbl_click_msec;
         let dbl_click_width;
@@ -304,7 +319,7 @@ impl Control {
 
         *control = Some(Control {
             hwnd,
-            display: display.unwrap_or(hwnd),
+            display,
             capture_mouse: None,
             last: None,
             widgets,
@@ -316,11 +331,13 @@ impl Control {
             dbl_click_msec,
             dbl_click_width,
             dbl_click_height,
+            drag_files: None,
 
             hooks,
         });
 
         GlobalMouseHook::start(hwnd);
+        drop_target::DropTarget::start(hwnd, display);
     }
 
     fn test_widgets(&self, x: i32, y: i32) -> Option<usize> {
@@ -357,6 +374,7 @@ impl Control {
         let mut scope = ControlScope {
             widget: last,
             events: &mut self.events,
+            drag_files: None,
         };
 
         let widget = &mut self.widgets[scope.widget];
@@ -364,6 +382,11 @@ impl Control {
         event.kind = EventKind::MouseLeave;
         widget.inner.handle_event(&mut scope, event);
         self.last = None;
+    }
+
+    fn drag_enter(&mut self, files: &mut Vec<PathBuf>) -> bool {
+        self.drag_files = Some(core::mem::take(files));
+        true
     }
 
     fn handle_event(
@@ -388,11 +411,12 @@ impl Control {
                 let mut scope = ControlScope {
                     widget: i,
                     events: &mut self.events,
+                    drag_files: self.drag_files.as_ref().map(|v| &**v),
                 };
 
                 let widget = &mut self.widgets[scope.widget];
                 let mut event = event_.scope(widget.rect);
-                event.kind = EventKind::MouseEnter;
+                event.kind = EventKind::MouseEnter(event_.kind.is_dragdrop());
                 widget.inner.handle_event(&mut scope, event);
                 self.last = target;
             }
@@ -410,6 +434,7 @@ impl Control {
             let mut scope = ControlScope {
                 widget: i,
                 events: &mut self.events,
+                drag_files: self.drag_files.as_ref().map(|v| &**v),
             };
 
             let widget = &mut self.widgets[scope.widget];
@@ -524,6 +549,7 @@ impl Control {
             let mut scope = ControlScope {
                 widget: 0,
                 events: &mut self.events,
+                drag_files: None,
             };
 
             let mut event = Event {
@@ -554,6 +580,7 @@ impl Control {
         let mut scope = ControlScope {
             widget: 0,
             events: &mut self.events,
+            drag_files: None,
         };
 
         if let Some(i) = self.capture_mouse.take() {
@@ -576,9 +603,14 @@ impl Control {
 pub struct ControlScope<'a> {
     widget: usize,
     events: &'a mut Vec<WidgetEvent>,
+    drag_files: Option<&'a [PathBuf]>
 }
 
 impl<'a> ControlScope<'a> {
+    pub fn drag_files(&self) -> Option<&[PathBuf]> {
+        self.drag_files
+    }
+
     pub fn capture_mouse(&mut self) {
         self.events.push(WidgetEvent::CaptureMouse(Some(self.widget)));
     }
@@ -634,6 +666,33 @@ unsafe extern "system" fn wnd_proc(
 
         let event = if msg == Control::WM_PRIV_MOUSE {
             Event::from_msg(&control.hwnd, l_param.0 as u32, w_param.0)
+        } else if msg == Control::WM_PRIV_DRAGMOVE
+            || msg == Control::WM_PRIV_DRAGDROP
+        {
+            assert!(core::mem::size_of::<LPARAM>() == core::mem::size_of::<u64>());
+            let l = l_param.0 as u64;
+            let mut y = (l >> 32) as i32;
+            let mut x = l as i32;
+            unsafe {
+                let mut rect = RECT::default();
+                if GetWindowRect(control.hwnd, &mut rect).is_ok() {
+                    x -= rect.left;
+                    y -= rect.top;
+                    Some(Event {
+                        kind: if msg == Control::WM_PRIV_DRAGMOVE {
+                            EventKind::MouseMove(true)
+                        } else {
+                            EventKind::DragDrop
+                        },
+                        ctrl: false,
+                        shift: false,
+                        x,
+                        y,
+                    })
+                } else {
+                    None
+                }
+            }
         } else {
             Event::from_msg(&control.hwnd, msg, w_param.0)
         };
@@ -653,6 +712,22 @@ unsafe extern "system" fn wnd_proc(
             } else if Event::can_capture(msg) && control.capture_mouse.is_some() {
                 return None;
             }
+        } else if msg == Control::WM_PRIV_DRAGENTER {
+            control.mouse_leave(&Default::default());
+            let files = unsafe {
+                assert!(w_param.0 != 0 && w_param.0 % 8 == 0);
+                &mut *(w_param.0 as *mut Vec<PathBuf>)
+            };
+            control.drag_enter(files);
+        } else if msg == Control::WM_PRIV_MOUSELEAVE {
+            control.mouse_leave(&Event {
+                kind: EventKind::MouseLeave,
+                ctrl: false,
+                shift: false,
+                x: -1,
+                y: -1,
+            });
+            control.drag_files = None;
         } else if msg == WM_KILLFOCUS {
             control.lost_focus();
         } else if msg == WM_NCDESTROY {

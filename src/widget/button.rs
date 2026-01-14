@@ -115,10 +115,10 @@ impl super::Widget for ButtonWidget {
 
         let old = self.mode;
         match (event.kind, self.mode, intersect) {
-            (EventKind::MouseEnter, Mode::Held  , _) => self.mode = Mode::Active,
-            (EventKind::MouseEnter, _           , _) => self.mode = Mode::Hover,
-            (EventKind::MouseLeave, Mode::Active, _) => self.mode = Mode::Held,
-            (EventKind::MouseLeave, _           , _) => self.mode = Mode::Idle,
+            (EventKind::MouseEnter(_), Mode::Held  , _) => self.mode = Mode::Active,
+            (EventKind::MouseEnter(_), _           , _) => self.mode = Mode::Hover,
+            (EventKind::MouseLeave   , Mode::Active, _) => self.mode = Mode::Held,
+            (EventKind::MouseLeave   , _           , _) => self.mode = Mode::Idle,
 
             (EventKind::MouseLeftRelease, _, true ) => self.mode = Mode::Hover,
             (EventKind::MouseLeftRelease, _, false) => self.mode = Mode::Idle,

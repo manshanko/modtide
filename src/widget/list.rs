@@ -615,7 +615,7 @@ impl super::Widget for ModListWidget {
                 }
             }
 
-            EventKind::MouseMove => {
+            EventKind::MouseMove(_) => {
                 let drag = self.mouse_drag_y;
                 let hover = self.mouse_hover_y;
                 if let Some(drag) = &mut self.mouse_drag_y {

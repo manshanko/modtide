@@ -126,13 +126,13 @@ impl super::Widget for DropdownWidget {
             && x >= 0 && x < self.width as i32;
 
         match event.kind {
-            EventKind::MouseMove if !is_inside => {
+            EventKind::MouseMove(_) if !is_inside => {
                 if self.hovered_option.is_some() {
                     self.hovered_option = None;
                     control.redraw();
                 }
             }
-            EventKind::MouseMove => {
+            EventKind::MouseMove(_) => {
                 let offset = y - Self::BORDER_SIZE as i32;
                 let opt = offset / Self::ENTRY_HEIGHT as i32;
 
