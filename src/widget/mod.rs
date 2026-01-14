@@ -784,7 +784,7 @@ pub fn log(s: &str) {
     let mut fd = std::fs::OpenOptions::new()
         .append(true)
         .create(true)
-        .open("dt-mod-manager-log.txt")
+        .open("modtide-log.txt")
         .unwrap();
     writeln!(&mut fd, "{s}").unwrap();
 }
