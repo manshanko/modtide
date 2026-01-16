@@ -6,6 +6,7 @@ use windows::Win32::Foundation::GetLastError;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+mod archive;
 mod log;
 mod extract;
 mod hook;
