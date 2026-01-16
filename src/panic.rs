@@ -12,6 +12,12 @@ pub fn init() {
                 cb();
             }
         }
+        if let Some(loc) = info.location() {
+            let err = format!("panic at {}:{}:{}\n  {}",
+                loc.file(), loc.line(), loc.column(),
+                info.payload_as_str().unwrap_or("<no-panic-string-available>"));
+            crate::log::log(&err);
+        }
         default_hook(info)
     }));
 }
