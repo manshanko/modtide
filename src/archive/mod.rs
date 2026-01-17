@@ -8,12 +8,22 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::thread;
 
+mod raw;
+use raw::RawDir;
+
 trait ArchiveReader: Send + Sync {
     fn list(&self, monitor: &Monitor) -> Result<ArchiveList>;
     fn copy(&self, monitor: &Monitor, dest: &Path) -> Result<()>;
 }
 
 fn open_archive(path: &Path) -> Result<Option<Box<dyn ArchiveReader>>> {
+    let meta = fs::metadata(path)?;
+    if meta.is_dir() {
+        return Ok(Some(Box::new(RawDir::new(path)?)));
+    } else if !meta.is_file() {
+        return Ok(None);
+    }
+
     // TODO: more archive formats
     Ok(None)
 }
