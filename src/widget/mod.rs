@@ -60,6 +60,7 @@ pub enum EventKind {
     Show,
     Hide,
     Custom(u32),
+    None,
 }
 
 #[derive(Clone)]
@@ -157,6 +158,18 @@ impl Event {
         out.x -= rect[0] as i32;
         out.y -= rect[1] as i32;
         out
+    }
+}
+
+impl Default for Event {
+    fn default() -> Self {
+        Self {
+            kind: EventKind::None,
+            ctrl: false,
+            shift: false,
+            x: -1,
+            y: -1,
+        }
     }
 }
 
