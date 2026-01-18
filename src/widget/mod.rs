@@ -248,6 +248,7 @@ impl Control {
     const WM_PRIV_DRAGENTER: u32 = WM_APP + 0x335;
     const WM_PRIV_DRAGMOVE: u32 = WM_APP + 0x336;
     const WM_PRIV_DRAGDROP: u32 = WM_APP + 0x337;
+    const WM_PRIV_CUSTOM: u32 = WM_APP + 0x338;
 
     pub fn hook(
         mod_list: list::ModListWidget,
@@ -715,6 +716,13 @@ unsafe extern "system" fn wnd_proc(
                 ..Default::default()
             });
             control.drag_files = None;
+        } else if msg == Control::WM_PRIV_CUSTOM {
+            let widget = l_param.0 as u32;
+            let event = (l_param.0 >> 32) as u32;
+            control.scope_widget(widget as usize, Event {
+                kind: EventKind::Custom(event),
+                ..Default::default()
+            });
         } else if msg == WM_KILLFOCUS {
             control.lost_focus();
         } else if msg == WM_NCDESTROY {
