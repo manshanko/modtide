@@ -1,5 +1,10 @@
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
+use std::io;
+use std::sync::mpsc;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::Receiver;
 
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
 use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
@@ -7,6 +12,10 @@ use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
 
 use crate::mod_engine::ModEngine;
 use crate::mod_engine::ModState;
+use crate::archive::Archive;
+use crate::archive::ArchiveList;
+use crate::archive::ArchiveView;
+use crate::archive::Prefix;
 use super::Control;
 use super::WidgetConfig;
 use super::button;
@@ -17,10 +26,188 @@ use super::Event;
 use super::EventKind;
 use super::KeyKind;
 
+fn check_archive(_path: &Path, list: &ArchiveList) -> io::Result<Prefix> {
+    if list.list("mods").is_some()
+        || list.list("binaries").is_some()
+    {
+        return Ok(Prefix::None);
+    } else {
+        let mut parent = None;
+        for (path, _ty, depth) in list.iter() {
+            if depth == 0 {
+                parent = Some(path);
+            } else if depth == 1
+                && let Some(name) = path.strip_suffix(".mod")
+                && Some(name) == parent
+            {
+                return Ok(Prefix::Mods);
+            }
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::Other, "unknown layout from dragdrop archive"))
+}
+
+enum DragDropEvent {
+    Error(String),
+    List(ArchiveView),
+    Copy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DragDropState {
+    None,
+    Listing,
+    Dragging,
+    Copying,
+    Copied,
+}
+
+struct DragDrop {
+    state: DragDropState,
+    root: PathBuf,
+    pump: Option<(Sender<DragDropEvent>, Receiver<DragDropEvent>)>,
+    archive: Option<Archive>,
+    view: Option<ArchiveView>,
+    complete: Option<Box<dyn FnOnce() + Send + Sync>>,
+    error: Option<String>,
+}
+
+impl DragDrop {
+    fn new(root: &Path) -> Self {
+        Self {
+            state: DragDropState::None,
+            root: root.canonicalize().unwrap(),
+            pump: None,
+            archive: None,
+            view: None,
+            complete: None,
+            error: None,
+        }
+    }
+
+    fn clear(&mut self) -> bool {
+        let redraw = self.state != DragDropState::None
+            || self.pump.is_some()
+            || self.archive.is_some()
+            || self.view.is_some();
+        self.state = DragDropState::None;
+        self.pump = None;
+        self.archive = None;
+        self.view = None;
+        redraw
+    }
+
+    fn poll(&mut self) -> bool {
+        if let Some((_send, recv)) = &self.pump {
+            let mut new_state = self.state;
+            while let Ok(event) = recv.try_recv() {
+                new_state = match event {
+                    DragDropEvent::Error(err) => {
+                        crate::log::log(&format!("mod list drag error: {err}"));
+                        self.error = Some(err);
+                        DragDropState::None
+                    }
+                    DragDropEvent::List(view) => {
+                        self.view = Some(view);
+                        if self.state == DragDropState::Copying {
+                            self.state
+                        } else {
+                            DragDropState::Dragging
+                        }
+                    }
+                    DragDropEvent::Copy => DragDropState::Copied,
+                }
+            }
+
+            if new_state != self.state {
+                self.state = new_state;
+                match self.state {
+                    DragDropState::None => {
+                        self.clear();
+                    }
+                    DragDropState::Copying => {
+                        assert!(self.view.is_some());
+                        self.copy();
+                    }
+                    _ => (),
+                }
+
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn copy(&mut self) {
+        if let Some((send, _recv)) = &self.pump {
+            if matches!(self.state, DragDropState::Listing | DragDropState::Dragging) {
+                let view = self.view.as_mut().unwrap();
+                let complete = self.complete.take().unwrap();
+                let send = send.clone();
+                view.copy(&self.root, move |count| {
+                    let _ = match count {
+                        Ok(_count) => send.send(DragDropEvent::Copy),
+                        Err(err) => send.send(DragDropEvent::Error(format!("failed Archive copy: {err:?}"))),
+                    };
+                    complete();
+                });
+            }
+        }
+    }
+
+    fn mouse_enter(
+        &mut self,
+        files: &[PathBuf],
+        complete: impl FnOnce() + Send + Sync + 'static,
+    ) -> bool {
+        assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
+
+        if let Ok(archive) = Archive::new(files, check_archive) {
+            let (send, recv) = mpsc::channel();
+            let send_ = send.clone();
+            archive.view(move |view| {
+                let _ = match view {
+                    Ok(view) => send_.send(DragDropEvent::List(view)),
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => return,
+                    Err(err) => send_.send(DragDropEvent::Error(format!("failed ArchiveView: {err:?}"))),
+                };
+                complete();
+            });
+            self.state = DragDropState::Listing;
+            self.pump = Some((send, recv));
+            self.archive = Some(archive);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn mouse_leave(&mut self) -> bool {
+        if matches!(self.state, DragDropState::Listing | DragDropState::Dragging) {
+            self.clear();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn drag_drop(
+        &mut self,
+        complete: impl FnOnce() + Send + Sync + 'static,
+    ) {
+        self.complete = Some(Box::new(complete));
+        self.copy();
+    }
+}
+
 #[derive(Clone)]
 pub enum ModListEvent {
     ToggleSelected = 0,
     OpenSelected = 1,
+    DragDropPoll = 2,
 }
 
 impl ModListEvent {
@@ -28,6 +215,7 @@ impl ModListEvent {
         Some(match msg {
             0 => ModListEvent::ToggleSelected,
             1 => ModListEvent::OpenSelected,
+            2 => ModListEvent::DragDropPoll,
             _ => return None,
         })
     }
@@ -52,6 +240,8 @@ pub struct ModListWidget {
     selected_pivot: usize,
     select_defer: Option<bool>,
     dropdown_defer: bool,
+
+    drag_drop: DragDrop,
 }
 
 impl ModListWidget {
@@ -102,12 +292,14 @@ impl ModListWidget {
         brush: ID2D1SolidColorBrush,
         text_format: IDWriteTextFormat,
     ) -> Self {
+        let mods_path = mods_path.into();
+        let drag_drop = DragDrop::new(mods_path.parent().unwrap());
         Self {
             background,
             brush,
             text_format,
 
-            mods_path: mods_path.into(),
+            mods_path,
             lorder: ModEngine::new(),
             builtins: Vec::new(),
             using_aml: false,
@@ -121,6 +313,8 @@ impl ModListWidget {
             selected_pivot: 0,
             select_defer: None,
             dropdown_defer: false,
+
+            drag_drop,
         }
     }
 
@@ -590,6 +784,39 @@ impl super::Widget for ModListWidget {
                         }
                     }
                     ModListEvent::OpenSelected => self.open_selected(),
+                    ModListEvent::DragDropPoll => {
+                        if self.drag_drop.poll() {
+                            if self.drag_drop.state == DragDropState::Copied {
+                                self.mount().unwrap();
+
+                                if let Some(view) = &self.drag_drop.view
+                                    && let Some(mods) = view.list().list("mods")
+                                {
+                                    let mut enable = Vec::new();
+                                    for (name, ty, depth) in mods.iter() {
+                                        if depth == 0 && ty.is_dir() {
+                                            let res = self.lorder.mods.iter()
+                                                .enumerate()
+                                                .find(|(_, m)| m.name() == name && m.state == ModState::Disabled);
+                                            if let Some((i, _)) = res {
+                                                enable.push(i);
+                                            }
+                                        }
+                                    }
+
+                                    for i in &enable {
+                                        self.toggle_mod(*i, Some(true));
+                                    }
+                                    if !enable.is_empty() {
+                                        self.update_mod_lorder();
+                                    }
+                                }
+                                self.drag_drop.clear();
+                            }
+
+                            control.redraw();
+                        }
+                    }
                 }
             }
             return;
@@ -607,15 +834,31 @@ impl super::Widget for ModListWidget {
             && y >= top && y < bottom;
 
         match event.kind {
-            EventKind::MouseLeave => {
-                let hover = self.mouse_hover_y;
-                self.mouse_hover_y = None;
-                if self.update_mouse_hover(hover) {
+            EventKind::MouseEnter(true) => {
+                let notify = control.dispatcher();
+                let drag_files = control.drag_files().unwrap();
+                if self.drag_drop.mouse_enter(drag_files, move || {
+                    notify(ModListEvent::DragDropPoll as u32);
+                }) {
                     control.redraw();
                 }
             }
 
-            EventKind::MouseMove(_) => {
+            EventKind::MouseLeave => {
+                let mut redraw = false;
+
+                redraw |= self.drag_drop.mouse_leave();
+
+                let hover = self.mouse_hover_y;
+                self.mouse_hover_y = None;
+                redraw |= self.update_mouse_hover(hover);
+
+                if redraw {
+                    control.redraw();
+                }
+            }
+
+            EventKind::MouseMove(false) => {
                 let drag = self.mouse_drag_y;
                 let hover = self.mouse_hover_y;
                 if let Some(drag) = &mut self.mouse_drag_y {
@@ -834,12 +1077,21 @@ impl super::Widget for ModListWidget {
                         self.clicked_mod = None;
                         self.mouse_drag_y = None;
                         self.select_defer = None;
+                        self.drag_drop.clear();
                         control.redraw();
                     }
                 }
             }
 
             EventKind::Hide => DropdownWidget::hide(control),
+
+            EventKind::DragDrop => {
+                let notify = control.dispatcher();
+                self.drag_drop.drag_drop(move || {
+                    notify(ModListEvent::DragDropPoll as u32);
+                });
+                control.redraw();
+            }
 
             _ => (),
         }
