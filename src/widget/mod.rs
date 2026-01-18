@@ -340,6 +340,11 @@ impl Control {
         drop_target::DropTarget::start(hwnd, display);
     }
 
+    fn drag_enter(&mut self, files: &mut Vec<PathBuf>) -> bool {
+        self.drag_files = Some(core::mem::take(files));
+        true
+    }
+
     fn test_widgets(&self, x: i32, y: i32) -> Option<usize> {
         let x = u32::try_from(x).ok()?;
         let y = u32::try_from(y).ok()?;
@@ -366,27 +371,39 @@ impl Control {
         None
     }
 
+    fn scope_widget(&mut self, i: usize, event: Event) {
+        let mut scope = ControlScope {
+            hwnd: self.display,
+            widget: i,
+            events: &mut self.events,
+            drag_files: self.drag_files.as_ref().map(|v| &**v),
+        };
+        let widget = &mut self.widgets[i];
+        widget.inner.handle_event(&mut scope, event);
+    }
+
     fn mouse_leave(&mut self, event_: &Event) {
         let Some(last) = self.last else {
             return;
         };
 
-        let mut scope = ControlScope {
-            widget: last,
-            events: &mut self.events,
-            drag_files: None,
-        };
-
-        let widget = &mut self.widgets[scope.widget];
+        let widget = &mut self.widgets[last];
         let mut event = event_.scope(widget.rect);
         event.kind = EventKind::MouseLeave;
-        widget.inner.handle_event(&mut scope, event);
+        self.scope_widget(last, event);
         self.last = None;
     }
 
-    fn drag_enter(&mut self, files: &mut Vec<PathBuf>) -> bool {
-        self.drag_files = Some(core::mem::take(files));
-        true
+    fn lost_focus(&mut self) {
+        let Some(i) = self.capture_mouse.take() else {
+            return;
+        };
+
+        self.scope_widget(i, Event {
+            kind: EventKind::LostFocus,
+            ..Default::default()
+        });
+        self.handle_events();
     }
 
     fn handle_event(
@@ -408,16 +425,10 @@ impl Control {
             self.mouse_leave(&event_);
 
             if let Some(i) = target {
-                let mut scope = ControlScope {
-                    widget: i,
-                    events: &mut self.events,
-                    drag_files: self.drag_files.as_ref().map(|v| &**v),
-                };
-
-                let widget = &mut self.widgets[scope.widget];
+                let widget = &mut self.widgets[i];
                 let mut event = event_.scope(widget.rect);
                 event.kind = EventKind::MouseEnter(event_.kind.is_dragdrop());
-                widget.inner.handle_event(&mut scope, event);
+                self.scope_widget(i, event);
                 self.last = target;
             }
         }
@@ -431,13 +442,7 @@ impl Control {
         target = self.capture_mouse.or(target);
 
         if let Some(i) = target {
-            let mut scope = ControlScope {
-                widget: i,
-                events: &mut self.events,
-                drag_files: self.drag_files.as_ref().map(|v| &**v),
-            };
-
-            let widget = &mut self.widgets[scope.widget];
+            let widget = &mut self.widgets[i];
             let mut event = event_.scope(widget.rect);
 
             if event.kind == EventKind::MouseLeftPress && widget.config.listen_double_click {
@@ -459,7 +464,7 @@ impl Control {
                 }
             }
 
-            widget.inner.handle_event(&mut scope, event);
+            self.scope_widget(i, event);
         }
 
         self.handle_events();
@@ -546,25 +551,14 @@ impl Control {
         }
 
         if !post_events.is_empty() {
-            let mut scope = ControlScope {
-                widget: 0,
-                events: &mut self.events,
-                drag_files: None,
-            };
-
             let mut event = Event {
                 kind: EventKind::LostFocus,
-                ctrl: false,
-                shift: false,
-                x: -1,
-                y: -1,
+                ..Default::default()
             };
 
             for (target, kind) in post_events {
-                scope.widget = target;
                 event.kind = kind;
-                let widget = &mut self.widgets[scope.widget];
-                widget.inner.handle_event(&mut scope, event.clone());
+                self.scope_widget(target, event.clone());
             }
 
             self.handle_events();
@@ -575,32 +569,10 @@ impl Control {
             update_display(&self.display);
         }
     }
-
-    fn lost_focus(&mut self) {
-        let mut scope = ControlScope {
-            widget: 0,
-            events: &mut self.events,
-            drag_files: None,
-        };
-
-        if let Some(i) = self.capture_mouse.take() {
-            let widget = &mut self.widgets[i];
-            scope.widget = i;
-            let event = Event {
-                kind: EventKind::LostFocus,
-                ctrl: false,
-                shift: false,
-                x: -1,
-                y: -1,
-            };
-            widget.inner.handle_event(&mut scope, event);
-        }
-
-        self.handle_events();
-    }
 }
 
 pub struct ControlScope<'a> {
+    hwnd: HWND,
     widget: usize,
     events: &'a mut Vec<WidgetEvent>,
     drag_files: Option<&'a [PathBuf]>
@@ -642,6 +614,23 @@ impl<'a> ControlScope<'a> {
 
     pub fn send_event(&mut self, target: usize, event: u32) {
         self.events.push(WidgetEvent::SendEvent(target, event));
+    }
+
+    pub fn dispatcher(&self) -> Box<dyn Fn(u32) + Send + Sync + 'static> {
+        let hwnd_ = self.hwnd.0 as usize;
+        let widget = self.widget;
+        Box::new(move |event| {
+            let hwnd = HWND(hwnd_ as *mut _);
+            let event = event as usize;
+            unsafe {
+                let _ = PostMessageW(
+                    Some(hwnd),
+                    Control::WM_PRIV_CUSTOM,
+                    Default::default(),
+                    LPARAM((widget | (event << 32)) as isize),
+                );
+            }
+        })
     }
 
     pub fn redraw(&mut self) {
@@ -723,10 +712,7 @@ unsafe extern "system" fn wnd_proc(
         } else if msg == Control::WM_PRIV_MOUSELEAVE {
             control.mouse_leave(&Event {
                 kind: EventKind::MouseLeave,
-                ctrl: false,
-                shift: false,
-                x: -1,
-                y: -1,
+                ..Default::default()
             });
             control.drag_files = None;
         } else if msg == WM_KILLFOCUS {
