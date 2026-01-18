@@ -704,13 +704,13 @@ unsafe extern "system" fn wnd_proc(
                 }
 
                 if Event::can_capture(msg) {
-                    return None;
+                    return Ok(0);
                 }
             } else if msg == Control::WM_PRIV_MOUSE {
                 control.handle_event(event);
-                return None;
+                return Ok(0);
             } else if Event::can_capture(msg) && control.capture_mouse.is_some() {
-                return None;
+                return Ok(0);
             }
         } else if msg == Control::WM_PRIV_DRAGENTER {
             control.mouse_leave(&Default::default());
@@ -719,6 +719,7 @@ unsafe extern "system" fn wnd_proc(
                 &mut *(w_param.0 as *mut Vec<PathBuf>)
             };
             control.drag_enter(files);
+            return Ok(1);
         } else if msg == Control::WM_PRIV_MOUSELEAVE {
             control.mouse_leave(&Event {
                 kind: EventKind::MouseLeave,
@@ -753,18 +754,18 @@ unsafe extern "system" fn wnd_proc(
         }
 
         if msg == Control::WM_PRIV_MOUSE {
-            return None;
+            Ok(0)
+        } else {
+            Err(hook)
         }
-
-        Some(hook)
     });
 
-    if let Some(Some(hook)) = res {
-        unsafe {
+    match res {
+        Some(Err(hook)) => unsafe {
             CallWindowProcW(Some(hook), hwnd, msg, w_param, l_param)
-        }
-    } else {
-        LRESULT(0)
+        },
+        Some(Ok(res)) => LRESULT(res),
+        _ => LRESULT(0),
     }
 }
 
