@@ -103,7 +103,7 @@ impl DragDrop {
             while let Ok(event) = recv.try_recv() {
                 new_state = match event {
                     DragDropEvent::Error(err) => {
-                        crate::log::log(&format!("mod list drag error: {err}"));
+                        crate::log::log(&err);
                         self.error = Some(err);
                         DragDropState::None
                     }
@@ -120,10 +120,14 @@ impl DragDrop {
             }
 
             if new_state != self.state {
+                let old_state = self.state;
                 self.state = new_state;
                 match self.state {
                     DragDropState::None => {
                         self.clear();
+                        if old_state != DragDropState::Copying {
+                            self.state = DragDropState::Dragging
+                        }
                     }
                     DragDropState::Copying => {
                         assert!(self.view.is_some());
@@ -141,6 +145,17 @@ impl DragDrop {
         }
     }
 
+    fn format_error(err: &io::Error) -> String {
+        if let Some(inner) = err.get_ref() {
+            match err.kind() {
+                io::ErrorKind::Other => format!("modtide error:\n  {inner:?}"),
+                kind => format!("{kind}:\n  {inner:?}"),
+            }
+        } else {
+            format!("{err:?}")
+        }
+    }
+
     fn copy(&mut self) {
         if let Some((send, _recv)) = &self.pump {
             if self.is_dragging() {
@@ -150,11 +165,13 @@ impl DragDrop {
                 view.copy(&self.root, move |count| {
                     let _ = match count {
                         Ok(_count) => send.send(DragDropEvent::Copy),
-                        Err(err) => send.send(DragDropEvent::Error(format!("failed Archive copy: {err:?}"))),
+                        Err(err) => send.send(DragDropEvent::Error(Self::format_error(&err))),
                     };
                     complete();
                 });
             }
+        } else {
+            self.state = DragDropState::None;
         }
     }
 
@@ -179,7 +196,7 @@ impl DragDrop {
                 let _ = match view {
                     Ok(view) => send_.send(DragDropEvent::List(view)),
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => return,
-                    Err(err) => send_.send(DragDropEvent::Error(format!("failed ArchiveView: {err:?}"))),
+                    Err(err) => send_.send(DragDropEvent::Error(Self::format_error(&err))),
                 };
                 complete();
             });
