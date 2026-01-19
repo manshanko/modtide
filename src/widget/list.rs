@@ -1215,19 +1215,26 @@ impl super::Widget for ModListWidget {
             }
 
             let mut offset = top;
+            let mut in_mods = false;
             let mut text = String::new();
             for (name, ty, depth) in view.list().iter() {
                 if offset + item_height >= bottom {
                     break;
                 }
 
-                let text = if ty.is_dir() {
+                if depth == 0 {
+                    in_mods = name == "mods";
+                } else if in_mods && depth > 1 {
+                    continue;
+                }
+
+                let text = if (in_mods && depth > 0) || !ty.is_dir() {
+                    name
+                } else {
                     text.clear();
                     text.push_str(name);
                     text.push_str("/");
                     &text
-                } else {
-                    name
                 };
 
                 let depth = depth as u32 * 8;
