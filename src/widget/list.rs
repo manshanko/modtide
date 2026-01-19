@@ -168,6 +168,7 @@ impl DragDrop {
         complete: impl FnOnce() + Send + Sync + 'static,
     ) -> bool {
         assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
+        self.error = None;
 
         if let Ok(archive) = Archive::new(files, check_archive) {
             let (send, recv) = mpsc::channel();
@@ -1066,6 +1067,7 @@ impl super::Widget for ModListWidget {
                         self.can_hover = is_inside;
                         self.select_defer = None;
                         self.drag_drop.clear();
+                        self.drag_drop.error = None;
                         control.redraw();
                     }
                 }
@@ -1258,6 +1260,26 @@ impl super::Widget for ModListWidget {
             }
 
             context.pop_axis_aligned_clip();
+        } else if let Some(text) = &self.drag_drop.error {
+            let item_height = self.item_height as u32;
+            let left = left + Self::MOD_ENTRY_LENGTH as u32 + 16;
+            let top = top + item_height;
+            let right = right - 8;
+            let bottom = bottom - item_height;
+
+            static ERROR_COLOR: [f32; 4] = [0.8, 0.2, 0.2, 1.0];
+            unsafe {
+                self.brush.SetColor(ERROR_COLOR.as_ptr() as *const _);
+                let _ = self.text_format.SetWordWrapping(
+                    windows::Win32::Graphics::DirectWrite::DWRITE_WORD_WRAPPING_WRAP);
+            }
+
+            context.draw_text(
+                text.as_ref(),
+                &self.text_format,
+                &self.brush,
+                &[left, top, right, bottom].map(|b| b as f32),
+            );
         }
     }
 }
