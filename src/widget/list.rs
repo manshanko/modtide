@@ -167,7 +167,9 @@ impl DragDrop {
         files: &[PathBuf],
         complete: impl FnOnce() + Send + Sync + 'static,
     ) -> bool {
-        assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
+        self.clear();
+        // see DragDrop::mouse_leave
+        //assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
         self.error = None;
 
         if let Ok(archive) = Archive::new(files, check_archive) {
@@ -190,14 +192,15 @@ impl DragDrop {
         }
     }
 
-    fn mouse_leave(&mut self) -> bool {
-        if self.is_dragging() {
-            self.clear();
-            true
-        } else {
-            false
-        }
-    }
+    // TODO: fix Control MouseLeave to work the same between windows and wine
+    //fn mouse_leave(&mut self) -> bool {
+    //    if self.is_dragging() {
+    //        self.clear();
+    //        true
+    //    } else {
+    //        false
+    //    }
+    //}
 
     fn drag_drop(
         &mut self,
@@ -850,14 +853,7 @@ impl super::Widget for ModListWidget {
             }
 
             EventKind::MouseLeave => {
-                let mut redraw = false;
-
-                redraw |= self.drag_drop.mouse_leave();
-
-                self.can_hover = false;
-                redraw |= self.update_mouse(self.mouse_pos);
-
-                if redraw {
+                if self.update_mouse(self.mouse_pos) {
                     control.redraw();
                 }
             }
