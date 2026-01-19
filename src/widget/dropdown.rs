@@ -1,5 +1,5 @@
-use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
-use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
+use crate::dxgi::SolidColorBrush;
+use crate::dxgi::TextFormat;
 
 use super::list::ModListEvent;
 use super::list::ModListWidget;
@@ -29,8 +29,8 @@ impl DropdownMenu {
 }
 
 pub struct DropdownWidget {
-    brush: ID2D1SolidColorBrush,
-    text_format: IDWriteTextFormat,
+    brush: SolidColorBrush,
+    text_format: TextFormat,
 
     width: u32,
     height: u32,
@@ -50,8 +50,8 @@ impl DropdownWidget {
     const HIGHLIGHT: [f32; 4] = [0.15, 0.15, 0.15, 1.0];
 
     pub fn new(
-        brush: ID2D1SolidColorBrush,
-        text_format: IDWriteTextFormat,
+        brush: SolidColorBrush,
+        text_format: TextFormat,
     ) -> Self {
         Self {
             brush,
@@ -175,18 +175,14 @@ impl super::Widget for DropdownWidget {
         ];
         let radius = 2.0;
 
-        unsafe {
-            self.brush.SetColor(Self::BACKGROUND.as_ptr() as *const _);
-        }
+        self.brush.set_color(&Self::BACKGROUND);
         context.fill_rounded_rect(
             &self.brush,
             rect,
             radius,
         );
 
-        unsafe {
-            self.brush.SetColor(Self::BORDER.as_ptr() as *const _);
-        }
+        self.brush.set_color(&Self::BORDER);
         context.draw_rounded_rect(
             &self.brush,
             rect,
@@ -204,9 +200,7 @@ impl super::Widget for DropdownWidget {
             ];
 
             if Some(i) == self.hovered_option {
-                unsafe {
-                    self.brush.SetColor(Self::HIGHLIGHT.as_ptr() as *const _);
-                }
+                self.brush.set_color(&Self::HIGHLIGHT);
 
                 let mid = o + Self::ENTRY_HEIGHT as f32 / 2.0;
                 let from = [
@@ -220,9 +214,7 @@ impl super::Widget for DropdownWidget {
                 context.draw_line(from, to, &self.brush, (Self::ENTRY_HEIGHT - 4) as f32);
             }
 
-            unsafe {
-                self.brush.SetColor(Self::TEXT_COLOR.as_ptr() as *const _);
-            }
+            self.brush.set_color(&Self::TEXT_COLOR);
 
             context.draw_text(
                 text.as_ref(),

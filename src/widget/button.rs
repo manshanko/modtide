@@ -1,5 +1,5 @@
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
-use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
+use crate::dxgi::SolidColorBrush;
 
 use super::Event;
 use super::EventKind;
@@ -55,7 +55,7 @@ impl ButtonWidget {
 
     pub fn fallback(
         context: &mut super::DrawScope,
-        brush: &ID2D1SolidColorBrush,
+        brush: &SolidColorBrush,
         is_active: bool,
     ) {
         let rect = [
@@ -66,23 +66,19 @@ impl ButtonWidget {
         ];
         let radius = 2.0;
 
-        let ptr = if is_active {
-            Self::FALLBACK_ACTIVE.as_ptr()
+        let color = if is_active {
+            Self::FALLBACK_ACTIVE
         } else {
-            Self::FALLBACK_IDLE.as_ptr()
+            Self::FALLBACK_IDLE
         };
-        unsafe {
-            brush.SetColor(ptr as *const _);
-        }
+        brush.set_color(&color);
         context.fill_rounded_rect(
             brush,
             rect,
             radius,
         );
 
-        unsafe {
-            brush.SetColor(Self::FALLBACK_BORDER.as_ptr() as *const _);
-        }
+        brush.set_color(&Self::FALLBACK_BORDER);
         context.draw_rounded_rect(
             brush,
             rect,

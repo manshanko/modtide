@@ -137,7 +137,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     unsafe {
-        brush.SetColor(brush_color.as_ptr() as *const _);
+        brush.set_color(&brush_color);
 
         let size = button_active.GetPixelSize();
         let sizef = button_active.GetSize();
@@ -148,10 +148,8 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
             sizef.height,
         ];
 
-        text_format.SetTextAlignment(
-            windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_ALIGNMENT_CENTER).unwrap();
-        text_format.SetParagraphAlignment(
-            windows::Win32::Graphics::DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT_CENTER).unwrap();
+        text_format.set_text_alignment(crate::dxgi::Alignment::Mid).unwrap();
+        text_format.set_paragraph_alignment(crate::dxgi::Alignment::Mid).unwrap();
         //let text_layout = context.create_text_layout(
         //    &b"MODS".map(u16::from),
         //    &text_format,
@@ -178,10 +176,7 @@ fn init() -> Result<(), Box<dyn std::error::Error>> {
         }
         drop(draw);
 
-        text_format.SetTextAlignment(
-            windows::Win32::Graphics::DirectWrite::DWRITE_TEXT_ALIGNMENT_LEADING).unwrap();
-        //text_format.SetParagraphAlignment(
-        //    windows::Win32::Graphics::DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT_CENTER).unwrap();
+        text_format.set_text_alignment(crate::dxgi::Alignment::Min).unwrap();
     }
 
     let dropdown = DropdownWidget::new(brush.clone(), text_format.clone());

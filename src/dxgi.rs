@@ -169,7 +169,7 @@ impl DxgiContext {
     pub fn create_solid_color_brush(
         &mut self,
         color: &[f32; 4],
-    ) -> Result<ID2D1SolidColorBrush> {
+    ) -> Result<SolidColorBrush> {
         let color = D2D1_COLOR_F {
             r: color[0],
             g: color[1],
@@ -180,7 +180,7 @@ impl DxgiContext {
             self.context.CreateSolidColorBrush(
                 &color,
                 None,
-            )
+            ).map(SolidColorBrush)
         }
     }
 
@@ -283,7 +283,7 @@ impl DxgiContext {
         &mut self,
         font_family: PCWSTR,
         font_size: f32,
-    ) -> Result<IDWriteTextFormat> {
+    ) -> Result<TextFormat> {
         unsafe {
             self.dwfactory.CreateTextFormat(
                 font_family,
@@ -293,21 +293,21 @@ impl DxgiContext {
                 DWRITE_FONT_STRETCH_NORMAL,
                 font_size,
                 windows::core::w!("en-us"),
-            )
+            ).map(TextFormat)
         }
     }
 
     pub fn create_text_layout(
         &mut self,
         text: &[u16],
-        text_format: &IDWriteTextFormat,
+        text_format: &TextFormat,
         width: f32,
         height: f32,
     ) -> Result<IDWriteTextLayout> {
         unsafe {
             self.dwfactory.CreateTextLayout(
                 text,
-                text_format,
+                &text_format.0,
                 width,
                 height,
             )
@@ -443,14 +443,14 @@ impl<'a> DrawScope<'a> {
         &mut self,
         from: [f32; 2],
         to: [f32; 2],
-        brush: &ID2D1SolidColorBrush,
+        brush: &SolidColorBrush,
         size: f32,
     ) {
         unsafe {
             self.context.DrawLine(
                 core::mem::transmute(from),
                 core::mem::transmute(to),
-                brush,
+                &brush.0,
                 size,
                 None,
             )
@@ -460,8 +460,8 @@ impl<'a> DrawScope<'a> {
     pub fn draw_text(
         &mut self,
         text: &OsStr,
-        text_format: &IDWriteTextFormat,
-        brush: &ID2D1SolidColorBrush,
+        text_format: &TextFormat,
+        brush: &SolidColorBrush,
         rect: &[f32; 4],
     ) {
         let _owner;
@@ -491,9 +491,9 @@ impl<'a> DrawScope<'a> {
         unsafe {
             self.context.DrawText(
                 text,
-                text_format,
+                &text_format.0,
                 &rect,
-                brush,
+                &brush.0,
                 D2D1_DRAW_TEXT_OPTIONS_CLIP,
                 DWRITE_MEASURING_MODE_NATURAL,
             );
@@ -502,7 +502,7 @@ impl<'a> DrawScope<'a> {
 
     pub fn draw_rounded_rect(
         &mut self,
-        brush: &ID2D1SolidColorBrush,
+        brush: &SolidColorBrush,
         rect: [f32; 4],
         radius: f32,
         size: f32,
@@ -520,7 +520,7 @@ impl<'a> DrawScope<'a> {
             };
             self.context.DrawRoundedRectangle(
                 &round,
-                brush,
+                &brush.0,
                 size,
                 None,
             )
@@ -529,7 +529,7 @@ impl<'a> DrawScope<'a> {
 
     pub fn fill_rounded_rect(
         &mut self,
-        brush: &ID2D1SolidColorBrush,
+        brush: &SolidColorBrush,
         rect: [f32; 4],
         radius: f32,
     ) {
@@ -546,7 +546,7 @@ impl<'a> DrawScope<'a> {
             };
             self.context.FillRoundedRectangle(
                 &round,
-                brush,
+                &brush.0,
             )
         }
     }
@@ -619,6 +619,68 @@ impl<'a> Drop for HdcScope<'a> {
     fn drop(&mut self) {
         unsafe {
             let _ = self.interop.ReleaseDC(None);
+        }
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct SolidColorBrush(ID2D1SolidColorBrush);
+
+impl SolidColorBrush {
+    pub fn set_color(&self, color: &[f32; 4]) {
+        unsafe {
+            self.0.SetColor(color.as_ptr() as *const _);
+        }
+    }
+}
+
+pub enum WordWrapping {
+    Wrap,
+    NoWrap,
+}
+
+#[allow(dead_code)]
+pub enum Alignment {
+    Min,
+    Max,
+    Mid,
+}
+
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct TextFormat(IDWriteTextFormat);
+
+impl TextFormat {
+    pub fn set_word_wrapping(&self, wrap: WordWrapping) -> Result<()> {
+        let wrap = match wrap {
+            WordWrapping::Wrap => DWRITE_WORD_WRAPPING_WRAP,
+            WordWrapping::NoWrap => DWRITE_WORD_WRAPPING_NO_WRAP,
+        };
+        unsafe {
+            self.0.SetWordWrapping(wrap)
+        }
+    }
+
+    pub fn set_text_alignment(&self, align: Alignment) -> Result<()> {
+        let align = match align {
+            Alignment::Min => DWRITE_TEXT_ALIGNMENT_LEADING,
+            Alignment::Max => DWRITE_TEXT_ALIGNMENT_TRAILING,
+            Alignment::Mid => DWRITE_TEXT_ALIGNMENT_CENTER,
+        };
+        unsafe {
+            self.0.SetTextAlignment(align)
+        }
+    }
+
+    pub fn set_paragraph_alignment(&self, align: Alignment) -> Result<()> {
+        let align = match align {
+            Alignment::Min => DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
+            Alignment::Max => DWRITE_PARAGRAPH_ALIGNMENT_FAR,
+            Alignment::Mid => DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+        };
+        unsafe {
+            self.0.SetParagraphAlignment(align)
         }
     }
 }

@@ -7,8 +7,8 @@ use std::sync::mpsc::Sender;
 use std::sync::mpsc::Receiver;
 
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
-use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
-use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
+use crate::dxgi::SolidColorBrush;
+use crate::dxgi::TextFormat;
 
 use crate::mod_engine::ModEngine;
 use crate::mod_engine::ModState;
@@ -231,8 +231,8 @@ impl ModListEvent {
 
 pub struct ModListWidget {
     background: ID2D1Bitmap,
-    brush: ID2D1SolidColorBrush,
-    text_format: IDWriteTextFormat,
+    brush: SolidColorBrush,
+    text_format: TextFormat,
 
     mods_path: PathBuf,
     lorder: ModEngine,
@@ -299,8 +299,8 @@ impl ModListWidget {
     pub fn new(
         mods_path: impl Into<PathBuf>,
         background: ID2D1Bitmap,
-        brush: ID2D1SolidColorBrush,
-        text_format: IDWriteTextFormat,
+        brush: SolidColorBrush,
+        text_format: TextFormat,
     ) -> Self {
         let mods_path = mods_path.into();
         let drag_drop = DragDrop::new(mods_path.parent().unwrap());
@@ -332,7 +332,7 @@ impl ModListWidget {
 
     pub fn fallback(
         context: &mut super::DrawScope,
-        brush: &ID2D1SolidColorBrush,
+        brush: &SolidColorBrush,
     ) {
         let rect = [
             (Self::MARGIN_X - 2) as f32,
@@ -342,18 +342,14 @@ impl ModListWidget {
         ];
         let radius = 8.0;
 
-        unsafe {
-            brush.SetColor(Self::FALLBACK_BACKGROUND.as_ptr() as *const _);
-        }
+        brush.set_color(&Self::FALLBACK_BACKGROUND);
         context.fill_rounded_rect(
             brush,
             rect,
             radius,
         );
 
-        unsafe {
-            brush.SetColor(Self::FALLBACK_BORDER.as_ptr() as *const _);
-        }
+        brush.set_color(&Self::FALLBACK_BORDER);
         context.draw_rounded_rect(
             brush,
             rect,
@@ -664,9 +660,7 @@ impl ModListWidget {
         let item_height = self.item_height as u32;
 
         if hovered {
-            unsafe {
-                self.brush.SetColor(Self::MOD_HIGHLIGHT.as_ptr() as *const _);
-            }
+            self.brush.set_color(&Self::MOD_HIGHLIGHT);
 
             let mid = (top + o + self.item_height as u32 / 2) as f32;
             let from = [
@@ -680,9 +674,7 @@ impl ModListWidget {
             context.draw_line(from, to, &self.brush, 18.0);
         }
 
-        unsafe {
-            self.brush.SetColor(color.as_ptr() as *const _);
-        }
+        self.brush.set_color(&color);
 
         let rect = [
             (left + Self::TEXT_PADDING) as f32,
@@ -698,9 +690,7 @@ impl ModListWidget {
         );
 
         if selected {
-            unsafe {
-                self.brush.SetColor(color.as_ptr() as *const _);
-            }
+            self.brush.set_color(&color);
 
             let mid = (top + o + self.item_height as u32 / 2) as f32;
             let from = [
@@ -1086,10 +1076,7 @@ impl super::Widget for ModListWidget {
     fn render(&mut self, context: &mut super::DrawScope) {
         context.draw_bitmap(&self.background, None, None);
 
-        unsafe {
-            let _ = self.text_format.SetWordWrapping(
-                windows::Win32::Graphics::DirectWrite::DWRITE_WORD_WRAPPING_NO_WRAP);
-        }
+        self.text_format.set_word_wrapping(crate::dxgi::WordWrapping::NoWrap).unwrap();
 
         let left = Self::MARGIN_X;
         let top = Self::MARGIN_Y;
@@ -1168,10 +1155,7 @@ impl super::Widget for ModListWidget {
         context.pop_axis_aligned_clip();
 
         if self.drag_drop.is_dragging() {
-            static OPAQUE_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
-            unsafe {
-                self.brush.SetColor(OPAQUE_FILL.as_ptr() as *const _);
-            }
+            self.brush.set_color(&[0.0, 0.0, 0.0, 0.5]);
             context.fill_rounded_rect(
                 &self.brush,
                 [left, top, right, bottom].map(|b| b as f32),
@@ -1180,9 +1164,7 @@ impl super::Widget for ModListWidget {
         }
 
         if self.can_drag {
-            unsafe {
-                self.brush.SetColor(Self::MOD_BUILTIN_GOLD.as_ptr() as *const _);
-            }
+            self.brush.set_color(&Self::MOD_BUILTIN_GOLD);
 
             let (_, draw_y) = self.get_slot(self.mouse_pos);
             let from = [
@@ -1210,10 +1192,7 @@ impl super::Widget for ModListWidget {
                 bottom as f32,
             ]);
 
-            static TEXT_COLOR: [f32; 4] = [0.7, 0.7, 0.7, 1.0];
-            unsafe {
-                self.brush.SetColor(TEXT_COLOR.as_ptr() as *const _);
-            }
+            self.brush.set_color(&[0.7, 0.7, 0.7, 1.0]);
 
             let mut offset = top;
             let mut in_mods = false;
@@ -1263,12 +1242,8 @@ impl super::Widget for ModListWidget {
             let right = right - 8;
             let bottom = bottom - item_height;
 
-            static ERROR_COLOR: [f32; 4] = [0.8, 0.2, 0.2, 1.0];
-            unsafe {
-                self.brush.SetColor(ERROR_COLOR.as_ptr() as *const _);
-                let _ = self.text_format.SetWordWrapping(
-                    windows::Win32::Graphics::DirectWrite::DWRITE_WORD_WRAPPING_WRAP);
-            }
+            self.brush.set_color(&[0.8, 0.2, 0.2, 1.0]);
+            self.text_format.set_word_wrapping(crate::dxgi::WordWrapping::Wrap).unwrap();
 
             context.draw_text(
                 text.as_ref(),
