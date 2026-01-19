@@ -381,6 +381,7 @@ impl Control {
         };
         let widget = &mut self.widgets[i];
         widget.inner.handle_event(&mut scope, event);
+        self.drain_events();
     }
 
     fn mouse_leave(&mut self, event_: &Event) {
@@ -404,7 +405,6 @@ impl Control {
             kind: EventKind::LostFocus,
             ..Default::default()
         });
-        self.handle_events();
     }
 
     fn handle_event(
@@ -468,8 +468,6 @@ impl Control {
             self.scope_widget(i, event);
         }
 
-        self.handle_events();
-
         target.is_some()
     }
 
@@ -485,7 +483,7 @@ impl Control {
         self.dirty = false;
     }
 
-    fn handle_events(&mut self) {
+    fn drain_events(&mut self) {
         let mut events = core::mem::take(&mut self.events);
         let mut capture = None;
         let mut redraw = false;
@@ -561,8 +559,6 @@ impl Control {
                 event.kind = kind;
                 self.scope_widget(target, event.clone());
             }
-
-            self.handle_events();
         }
 
         if redraw && !self.dirty {
