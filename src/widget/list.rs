@@ -233,6 +233,7 @@ pub struct ModListWidget {
 
     scroll: i32,
     item_height: i32,
+    active_mod: usize,
     clicked_mod: Option<usize>,
     mouse_pos: (i32, i32),
     can_drag: bool,
@@ -307,6 +308,7 @@ impl ModListWidget {
 
             scroll: 0,
             item_height: Self::ITEM_HEIGHT as i32,
+            active_mod: usize::MAX,
             clicked_mod: None,
             mouse_pos: (-1, -1),
             can_drag: false,
@@ -997,6 +999,7 @@ impl super::Widget for ModListWidget {
 
                         control.redraw();
                         control.capture_mouse();
+                        self.active_mod = clicked;
                         Some(clicked)
                     } else {
                         if !(event.shift || event.ctrl || self.selected.is_empty()) {
@@ -1015,9 +1018,10 @@ impl super::Widget for ModListWidget {
             EventKind::MouseDoubleClick => {
                 if is_inside
                     && !self.dropdown_defer
-                    && let Entry::Mod(entry) = self.get_entry(self.mouse_pos)
-                    && self.toggle_mod(entry, None)
+                    && Entry::Mod(self.active_mod) == self.get_entry(self.mouse_pos)
+                    && !self.selected.is_empty()
                 {
+                    self.toggle_selected();
                     self.update_mod_lorder();
                     control.redraw();
                 }
