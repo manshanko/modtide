@@ -812,7 +812,6 @@ impl super::Widget for ModListWidget {
                                         self.update_mod_lorder();
                                     }
                                 }
-                                self.drag_drop.clear();
                             }
 
                             control.redraw();
