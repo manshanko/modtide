@@ -679,7 +679,7 @@ impl ModListWidget {
         let rect = [
             (left + Self::TEXT_PADDING) as f32,
             (top + o) as f32,
-            (left + Self::WIDTH_INNER) as f32,
+            left as f32 + Self::MOD_ENTRY_LENGTH,
             (top + o + item_height) as f32,
         ];
         context.draw_text(
@@ -858,9 +858,9 @@ impl super::Widget for ModListWidget {
                 }
             }
 
-            EventKind::MouseMove(_) => {
+            EventKind::MouseMove(is_dragging) => {
                 if !self.can_drag {
-                    self.can_hover = true;
+                    self.can_hover = !is_dragging;
                 }
 
                 if self.update_mouse((x, y)) {
@@ -1085,6 +1085,11 @@ impl super::Widget for ModListWidget {
     fn render(&mut self, context: &mut super::DrawScope) {
         context.draw_bitmap(&self.background, None, None);
 
+        unsafe {
+            let _ = self.text_format.SetWordWrapping(
+                windows::Win32::Graphics::DirectWrite::DWRITE_WORD_WRAPPING_NO_WRAP);
+        }
+
         let left = Self::MARGIN_X;
         let top = Self::MARGIN_Y;
         let right = Self::MARGIN_X + Self::WIDTH_INNER;
@@ -1161,6 +1166,18 @@ impl super::Widget for ModListWidget {
 
         context.pop_axis_aligned_clip();
 
+        if matches!(self.drag_drop.state, DragDropState::Listing | DragDropState::Dragging) {
+            static OPAQUE_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
+            unsafe {
+                self.brush.SetColor(OPAQUE_FILL.as_ptr() as *const _);
+            }
+            context.fill_rounded_rect(
+                &self.brush,
+                [left, top, right, bottom].map(|b| b as f32),
+                0.0,
+            );
+        }
+
         if self.can_drag {
             unsafe {
                 self.brush.SetColor(Self::MOD_BUILTIN_GOLD.as_ptr() as *const _);
@@ -1176,6 +1193,61 @@ impl super::Widget for ModListWidget {
                 draw_y as f32,
             ];
             context.draw_line(from, to, &self.brush, 3.0);
+        }
+
+        if let Some(view) = &self.drag_drop.view {
+            let item_height = self.item_height as u32;
+            let left = left + Self::MOD_ENTRY_LENGTH as u32 + 16;
+            let top = top + item_height;
+            let right = right - 8;
+            let bottom = bottom - item_height;
+
+            context.push_axis_aligned_clip(&[
+                left as f32,
+                top as f32,
+                right as f32,
+                bottom as f32,
+            ]);
+
+            static TEXT_COLOR: [f32; 4] = [0.7, 0.7, 0.7, 1.0];
+            unsafe {
+                self.brush.SetColor(TEXT_COLOR.as_ptr() as *const _);
+            }
+
+            let mut offset = top;
+            let mut text = String::new();
+            for (name, ty, depth) in view.list().iter() {
+                if offset + item_height >= bottom {
+                    break;
+                }
+
+                let text = if ty.is_dir() {
+                    text.clear();
+                    text.push_str(name);
+                    text.push_str("/");
+                    &text
+                } else {
+                    name
+                };
+
+                let depth = depth as u32 * 8;
+
+                let rect = [
+                    (left + depth) as f32,
+                    offset as f32,
+                    right as f32,
+                    (offset + item_height) as f32,
+                ];
+                context.draw_text(
+                    text.as_ref(),
+                    &self.text_format,
+                    &self.brush,
+                    &rect,
+                );
+                offset += item_height;
+            }
+
+            context.pop_axis_aligned_clip();
         }
     }
 }
