@@ -450,10 +450,15 @@ impl ModListWidget {
     }
 
     fn get_entry(&self, pos: (i32, i32)) -> Entry {
-        let y = pos.1;
+        let (x, y) = pos;
+        let left = Self::MARGIN_X as i32;
         let top = Self::MARGIN_Y as i32;
         let offset = y - top;
-        if offset < 0 || offset > Self::HEIGHT_INNER as i32 {
+        if offset < 0
+            || offset > Self::HEIGHT_INNER as i32
+            || x < left
+            || x - left > Self::MOD_ENTRY_LENGTH as i32
+        {
             Entry::None
         } else {
             let offset = self.scroll + offset;
