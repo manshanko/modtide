@@ -143,7 +143,7 @@ impl DragDrop {
 
     fn copy(&mut self) {
         if let Some((send, _recv)) = &self.pump {
-            if matches!(self.state, DragDropState::Listing | DragDropState::Dragging) {
+            if self.is_dragging() {
                 let view = self.view.as_mut().unwrap();
                 let complete = self.complete.take().unwrap();
                 let send = send.clone();
@@ -156,6 +156,10 @@ impl DragDrop {
                 });
             }
         }
+    }
+
+    fn is_dragging(&self) -> bool {
+        matches!(self.state, DragDropState::Listing | DragDropState::Dragging)
     }
 
     fn mouse_enter(
@@ -186,7 +190,7 @@ impl DragDrop {
     }
 
     fn mouse_leave(&mut self) -> bool {
-        if matches!(self.state, DragDropState::Listing | DragDropState::Dragging) {
+        if self.is_dragging() {
             self.clear();
             true
         } else {
@@ -1165,7 +1169,7 @@ impl super::Widget for ModListWidget {
 
         context.pop_axis_aligned_clip();
 
-        if matches!(self.drag_drop.state, DragDropState::Listing | DragDropState::Dragging) {
+        if self.drag_drop.is_dragging() {
             static OPAQUE_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
             unsafe {
                 self.brush.SetColor(OPAQUE_FILL.as_ptr() as *const _);
