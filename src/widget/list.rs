@@ -234,8 +234,9 @@ pub struct ModListWidget {
     scroll: i32,
     item_height: i32,
     clicked_mod: Option<usize>,
-    mouse_drag_y: Option<i32>,
-    mouse_hover_y: Option<i32>,
+    mouse_pos: (i32, i32),
+    can_drag: bool,
+    can_hover: bool,
     selected: Vec<usize>,
     selected_pivot: usize,
     select_defer: Option<bool>,
@@ -307,8 +308,9 @@ impl ModListWidget {
             scroll: 0,
             item_height: Self::ITEM_HEIGHT as i32,
             clicked_mod: None,
-            mouse_drag_y: None,
-            mouse_hover_y: None,
+            mouse_pos: (-1, -1),
+            can_drag: false,
+            can_hover: false,
             selected: Vec::new(),
             selected_pivot: 0,
             select_defer: None,
@@ -441,7 +443,8 @@ impl ModListWidget {
         }
     }
 
-    fn get_entry(&self, y: i32) -> Entry {
+    fn get_entry(&self, pos: (i32, i32)) -> Entry {
+        let y = pos.1;
         let top = Self::MARGIN_Y as i32;
         let offset = y - top;
         if offset < 0 || offset > Self::HEIGHT_INNER as i32 {
@@ -457,7 +460,8 @@ impl ModListWidget {
         }
     }
 
-    fn get_slot(&self, y: i32) -> (usize, u32) {
+    fn get_slot(&self, pos: (i32, i32)) -> (usize, u32) {
+        let y = pos.1;
         let mut min_offset = self.builtins.len() as i32 * self.item_height;
         let mut max_offset = (self.builtins.len() + self.lorder.mods.len()) as i32 * self.item_height;
 
@@ -701,39 +705,34 @@ impl ModListWidget {
         }
     }
 
-    fn update_mouse_drag(
+    fn update_mouse(
         &mut self,
-        drag_y: Option<i32>,
+        pos: (i32, i32),
     ) -> bool {
-        if drag_y != self.mouse_drag_y {
-            if drag_y.is_none() || self.mouse_drag_y.is_none() {
-                return true;
-            } else if let Some(drag1) = drag_y
-                && let Some(drag2) = self.mouse_drag_y
-                && let (_, draw1) = self.get_slot(drag1)
-                && let (_, draw2) = self.get_slot(drag2)
-                && draw1 != draw2
-            {
-                return true;
-            }
-        }
-        false
-    }
+        let old_pos = self.mouse_pos;
+        if pos != old_pos {
+            self.mouse_pos = pos;
 
-    fn update_mouse_hover(
-        &mut self,
-        hover_y: Option<i32>,
-    ) -> bool {
-        if hover_y != self.mouse_hover_y {
-            if hover_y.is_none() || self.mouse_hover_y.is_none() {
-                return true;
-            } else if let Some(hover1) = hover_y
-                && let Some(hover2) = self.mouse_hover_y
-                && self.get_entry(hover1) != self.get_entry(hover2)
-            {
-                return true;
+            if self.can_hover {
+                if let Some(clicked) = self.clicked_mod
+                    && let entry = self.get_entry(pos)
+                    && (entry != Entry::Mod(clicked) || entry == Entry::None)
+                {
+                    self.can_hover = false;
+                    self.can_drag = true;
+                    return true;
+                } else if self.get_entry(pos) != self.get_entry(old_pos) {
+                    return true;
+                }
+            } else if self.can_drag {
+                let (_, slot1) = self.get_slot(pos);
+                let (_, slot2) = self.get_slot(old_pos);
+                if slot1 != slot2 {
+                    return true;
+                }
             }
         }
+
         false
     }
 
@@ -849,37 +848,20 @@ impl super::Widget for ModListWidget {
 
                 redraw |= self.drag_drop.mouse_leave();
 
-                let hover = self.mouse_hover_y;
-                self.mouse_hover_y = None;
-                redraw |= self.update_mouse_hover(hover);
+                self.can_hover = false;
+                redraw |= self.update_mouse(self.mouse_pos);
 
                 if redraw {
                     control.redraw();
                 }
             }
 
-            EventKind::MouseMove(false) => {
-                let drag = self.mouse_drag_y;
-                let hover = self.mouse_hover_y;
-                if let Some(drag) = &mut self.mouse_drag_y {
-                    *drag = y;
-                } else if let Some(clicked) = self.clicked_mod
-                    && let entry = self.get_entry(y)
-                    && (entry != Entry::Mod(clicked) || entry == Entry::None)
-                {
-                    self.mouse_hover_y = None;
-                    self.mouse_drag_y = Some(y);
-                } else if is_inside {
-                    self.mouse_hover_y = match self.get_entry(y) {
-                        Entry::Mod(_)
-                        | Entry::Builtin(_) => Some(y),
-                        _ => None,
-                    };
-                } else if self.mouse_hover_y.is_some(){
-                    self.mouse_hover_y = None;
+            EventKind::MouseMove(_) => {
+                if !self.can_drag {
+                    self.can_hover = true;
                 }
 
-                if self.update_mouse_drag(drag) || self.update_mouse_hover(hover) {
+                if self.update_mouse((x, y)) {
                     control.redraw();
                 }
             }
@@ -890,9 +872,8 @@ impl super::Widget for ModListWidget {
                 let is_right = event.kind == EventKind::MouseRightRelease;
                 if let Some(clicked) = self.clicked_mod {
                     control.release_mouse();
-                    if self.mouse_drag_y.is_none()
-                        && let Entry::Mod(entry) = self.get_entry(y)
-                        && entry == clicked
+                    if !self.can_drag
+                        && Entry::Mod(clicked) == self.get_entry((x, y))
                     {
                         if let Some(no_clear) = self.select_defer.take() {
                             if no_clear {
@@ -914,12 +895,12 @@ impl super::Widget for ModListWidget {
                         }
 
                         if self.dropdown_defer && is_right {
-                            self.mouse_hover_y = None;
+                            self.can_hover = true;
                             DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
                             control.redraw();
                         }
                     } else {
-                        let (swap_to, _) = self.get_slot(y);
+                        let (swap_to, _) = self.get_slot((x, y));
                         if self.move_selected(swap_to) {
                             if clicked < swap_to {
                                 self.selected_pivot = swap_to - 1;
@@ -927,7 +908,7 @@ impl super::Widget for ModListWidget {
                                 self.selected_pivot = swap_to;
                             }
                             if is_inside {
-                                self.mouse_hover_y = Some(y);
+                                self.can_hover = true;
                             }
                             self.update_mod_lorder();
                             control.redraw();
@@ -939,10 +920,10 @@ impl super::Widget for ModListWidget {
                     self.dropdown_defer = false;
                 }
                 self.clicked_mod = None;
-                self.mouse_drag_y = None;
+                self.can_drag = false;
                 self.select_defer = None;
 
-                if self.update_mouse_hover(is_inside.then_some(y)) {
+                if self.update_mouse(self.mouse_pos) {
                     control.redraw();
                 }
             }
@@ -958,7 +939,7 @@ impl super::Widget for ModListWidget {
             | EventKind::MouseRightPress => {
                 let is_right = event.kind == EventKind::MouseRightPress;
                 if is_inside {
-                    self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(y) {
+                    self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(self.mouse_pos) {
                         if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {
                             self.selected.clear();
                         }
@@ -1034,7 +1015,7 @@ impl super::Widget for ModListWidget {
             EventKind::MouseDoubleClick => {
                 if is_inside
                     && !self.dropdown_defer
-                    && let Entry::Mod(entry) = self.get_entry(y)
+                    && let Entry::Mod(entry) = self.get_entry(self.mouse_pos)
                     && self.toggle_mod(entry, None)
                 {
                     self.update_mod_lorder();
@@ -1072,10 +1053,10 @@ impl super::Widget for ModListWidget {
                         }
                     }
                     KeyKind::Escape => {
-                        self.mouse_hover_y = Some(y);
                         self.dropdown_defer = false;
                         self.clicked_mod = None;
-                        self.mouse_drag_y = None;
+                        self.can_drag = false;
+                        self.can_hover = is_inside;
                         self.select_defer = None;
                         self.drag_drop.clear();
                         control.redraw();
@@ -1127,7 +1108,7 @@ impl super::Widget for ModListWidget {
                     builtin,
                     Self::MOD_BUILTIN_GOLD,
                     offset as u32,
-                    Some(Entry::Builtin(i)) == self.mouse_hover_y.map(|y| self.get_entry(y)),
+                    Some(Entry::Builtin(i)) == self.can_hover.then(|| self.get_entry(self.mouse_pos)),
                     false,
                 );
                 offset += self.item_height;
@@ -1167,7 +1148,7 @@ impl super::Widget for ModListWidget {
                     m.name(),
                     color,
                     offset as u32,
-                    Some(Entry::Mod(i)) == self.mouse_hover_y.map(|y| self.get_entry(y)),
+                    Some(Entry::Mod(i)) == self.can_hover.then(|| self.get_entry(self.mouse_pos)),
                     self.selected.contains(&i),
                 );
                 offset += self.item_height;
@@ -1176,12 +1157,12 @@ impl super::Widget for ModListWidget {
 
         context.pop_axis_aligned_clip();
 
-        if let Some(drag_y) = self.mouse_drag_y {
+        if self.can_drag {
             unsafe {
                 self.brush.SetColor(Self::MOD_BUILTIN_GOLD.as_ptr() as *const _);
             }
 
-            let (_, draw_y) = self.get_slot(drag_y);
+            let (_, draw_y) = self.get_slot(self.mouse_pos);
             let from = [
                 Self::MARGIN_X as f32,
                 draw_y as f32,
