@@ -11,6 +11,9 @@ opt-level = "s"
 name = "dwmapi"
 crate-type = ["cdylib"]
 
+[dependencies]
+miniz_oxide = { version = "0.9.0", default-features = false }
+
 [dependencies.windows]
 version = "0.62"
 features = [

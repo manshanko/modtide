@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::io::Result;
@@ -10,6 +11,8 @@ use std::thread;
 
 mod raw;
 use raw::RawDir;
+mod zip;
+use zip::Zip;
 
 trait ArchiveReader: Send + Sync {
     fn list(&self, monitor: &Monitor) -> Result<ArchiveList>;
@@ -19,13 +22,15 @@ trait ArchiveReader: Send + Sync {
 fn open_archive(path: &Path) -> Result<Option<Box<dyn ArchiveReader>>> {
     let meta = fs::metadata(path)?;
     if meta.is_dir() {
-        return Ok(Some(Box::new(RawDir::new(path)?)));
+        Ok(Some(Box::new(RawDir::new(path)?)))
     } else if !meta.is_file() {
-        return Ok(None);
+        Ok(None)
+    } else if Some(OsStr::new("zip")) == path.extension() {
+        Ok(Some(Box::new(Zip::new(path)?)))
+    } else {
+        // TODO: more archive formats
+        Ok(None)
     }
-
-    // TODO: more archive formats
-    Ok(None)
 }
 
 struct Monitor(AtomicBool);
