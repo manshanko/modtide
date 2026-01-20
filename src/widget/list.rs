@@ -1223,7 +1223,7 @@ impl super::Widget for ModListWidget {
             let mut in_mods = false;
             let mut text = String::new();
             for (name, ty, depth) in view.list().iter() {
-                if offset + item_height >= bottom {
+                if offset >= bottom {
                     break;
                 }
 
