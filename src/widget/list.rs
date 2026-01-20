@@ -183,29 +183,33 @@ impl DragDrop {
         &mut self,
         files: &[PathBuf],
         complete: impl FnOnce() + Send + Sync + 'static,
-    ) -> bool {
+    ) {
         self.clear();
         // see DragDrop::mouse_leave
         //assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
         self.error = None;
 
-        if let Ok(archive) = Archive::new(files, check_archive) {
-            let (send, recv) = mpsc::channel();
-            let send_ = send.clone();
-            archive.view(move |view| {
-                let _ = match view {
-                    Ok(view) => send_.send(DragDropEvent::List(view)),
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => return,
-                    Err(err) => send_.send(DragDropEvent::Error(Self::format_error(&err))),
-                };
-                complete();
-            });
-            self.state = DragDropState::Listing;
-            self.pump = Some((send, recv));
-            self.archive = Some(archive);
-            true
-        } else {
-            false
+        match Archive::new(files, check_archive) {
+            Ok(archive) => {
+                let (send, recv) = mpsc::channel();
+                let send_ = send.clone();
+                archive.view(move |view| {
+                    let _ = match view {
+                        Ok(view) => send_.send(DragDropEvent::List(view)),
+                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => return,
+                        Err(err) => send_.send(DragDropEvent::Error(Self::format_error(&err))),
+                    };
+                    complete();
+                });
+                self.state = DragDropState::Listing;
+                self.pump = Some((send, recv));
+                self.archive = Some(archive);
+            }
+            Err(err) => {
+                self.error = Some(Self::format_error(&err));
+                self.clear();
+                self.state = DragDropState::Dragging;
+            }
         }
     }
 
@@ -857,11 +861,10 @@ impl super::Widget for ModListWidget {
             EventKind::MouseEnter(true) => {
                 let notify = control.dispatcher();
                 let drag_files = control.drag_files().unwrap();
-                if self.drag_drop.mouse_enter(drag_files, move || {
+                self.drag_drop.mouse_enter(drag_files, move || {
                     notify(ModListEvent::DragDropPoll as u32);
-                }) {
-                    control.redraw();
-                }
+                });
+                control.redraw();
             }
 
             EventKind::MouseLeave => {
