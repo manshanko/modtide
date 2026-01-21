@@ -2,7 +2,6 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fmt::Write;
 use std::path::Path;
-use std::path::PathBuf;
 
 pub struct ModEngine {
     pub header: String,
@@ -17,7 +16,7 @@ impl ModEngine {
         }
     }
 
-    pub fn scan(path: impl AsRef<Path>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    pub fn scan(path: impl AsRef<Path>) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut out = Vec::new();
         let path = path.as_ref();
         for fd in fs::read_dir(path)? {
@@ -27,26 +26,28 @@ impl ModEngine {
                 Err(err) => return Err(err.into()),
             };
 
-            let mut ext = None;
+            let mut name = None;
             for fd in dir {
                 let p = fd?.path();
                 if p.extension() != Some(OsStr::new("mod")) {
                     continue;
-                } else if ext.is_some() {
-                    ext = None;
+                } else if name.is_some() {
+                    name = None;
                     break;
                 }
 
                 if let Ok(p) = p.strip_prefix(path) {
-                    ext = Some(p.to_path_buf());
+                    name = Some(p.to_path_buf());
                 }
             }
 
-            if let Some(ext) = ext
-                && let Some(sort) = ext.file_stem()
+            if let Some(p) = name
+                && let Some(name) = p.file_stem()
+                && let Some(name) = name.to_str()
+                && let Some(p) = p.to_str()
             {
-                let lower = sort.to_string_lossy().to_lowercase();
-                out.push((ext, lower));
+                let lower = name.to_lowercase();
+                out.push((p.to_string(), lower));
             }
         }
         out.sort_by(|(_, a), (_, b)| a.cmp(b));
@@ -56,7 +57,7 @@ impl ModEngine {
     pub fn load(
         &mut self,
         load_order: &str,
-        paths: &[PathBuf],
+        paths: &[String],
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.header.clear();
         self.mods.clear();
@@ -89,46 +90,25 @@ impl ModEngine {
             self.mods.push(ModEntry {
                 state,
                 name: name.to_string(),
-                path: PathBuf::new(),
+                path: String::new(),
             });
         }
 
         for path in paths {
+            let path = path.replace('\\', "/");
             if path == "base/base.mod" || path == "dmf/dmf.mod" {
                 continue;
             }
 
-            let mut iter = path.iter();
-            let mut path = None;
-            let mut file = None;
-            while let Some(c) = iter.next() {
-                if c == OsStr::new(".") {
-                    continue;
-                }
-                path = Some(c);
-                file = iter.next();
-            }
-
-            if file.is_none() || iter.next().is_some() {
-                continue;
-            }
-            let path = path.unwrap();
-            let file = file.unwrap();
-
-            let Some(name) = file.to_str() else {
+            let Some((dir, file)) = path.split_once('/') else {
                 continue;
             };
 
-            let Some(name) = name.strip_suffix(".mod") else {
+            let Some(name) = file.strip_suffix(".mod") else {
                 continue;
             };
 
-            let disabled = path != name;
-            if disabled
-                && let Some(p) = path.to_str()
-                && let Some(p) = p.strip_prefix("_")
-                && p != name
-            {
+            if dir != name {
                 continue;
             }
 
@@ -136,20 +116,12 @@ impl ModEngine {
                 .find(|m| m.name == name);
 
             if let Some(m) = m {
-                m.path = PathBuf::from(path);
-                if disabled {
-                    m.state = ModState::Disabled;
-                }
+                m.path = path;
             } else {
-                let state = if disabled {
-                    ModState::Disabled
-                } else {
-                    ModState::MissingEntry
-                };
                 self.mods.push(ModEntry {
-                    state,
+                    state: ModState::MissingEntry,
                     name: name.to_string(),
-                    path: PathBuf::from(path),
+                    path,
                 });
             }
         }
@@ -181,7 +153,7 @@ impl ModEngine {
 pub struct ModEntry {
     pub state: ModState,
     name: String,
-    path: PathBuf,
+    path: String,
 }
 
 impl ModEntry {
@@ -189,7 +161,7 @@ impl ModEntry {
         &self.name
     }
 
-    pub fn path(&self) -> &Path {
+    pub fn path(&self) -> &str {
         &self.path
     }
 }
