@@ -460,7 +460,7 @@ impl ModListWidget {
         };
 
         let paths = ModEngine::scan(&self.mods_path)?;
-        self.lorder.load(load_order, &paths)?;
+        self.lorder.load(load_order, paths)?;
 
         Ok(())
     }
