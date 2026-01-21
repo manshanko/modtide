@@ -125,6 +125,8 @@ impl DragDrop {
         let redraw = self.state != DragDropState::None
             || self.archive.is_some()
             || self.view.is_some();
+        self.tag += 1;
+        self.mailbox.clear(self.tag);
         self.state = DragDropState::None;
         self.archive = None;
         self.view = None;
@@ -193,7 +195,9 @@ impl DragDrop {
     }
 
     fn copy(&mut self) {
-        if self.is_dragging() {
+        if self.view.is_none() {
+            self.state = DragDropState::None;
+        } else if self.is_dragging() {
             let view = self.view.as_mut().unwrap();
             let complete = self.complete.take().unwrap();
             let tag = self.tag;
@@ -899,6 +903,12 @@ impl super::Widget for ModListWidget {
                     notify(ModListEvent::DragDropPoll as u32);
                 });
                 control.redraw();
+            }
+            EventKind::MouseEnter(false) => {
+                if self.drag_drop.state != DragDropState::None {
+                    self.drag_drop.clear();
+                    control.redraw();
+                }
             }
 
             EventKind::MouseLeave => {
