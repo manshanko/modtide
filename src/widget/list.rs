@@ -2,9 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::io;
-use std::sync::mpsc;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
+use std::sync::Mutex;
 
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
 use crate::dxgi::SolidColorBrush;
@@ -47,6 +45,34 @@ fn check_archive(_path: &Path, list: &ArchiveList) -> io::Result<Prefix> {
     Err(io::Error::new(io::ErrorKind::Other, "unknown layout from dragdrop archive"))
 }
 
+struct Mailbox<T: Send>(Mutex<(u64, Option<T>)>);
+
+impl<T: Send> Mailbox<T> {
+    const fn new() -> Self {
+        Self(Mutex::new((0, None)))
+    }
+
+    fn clear(&self, tag: u64) {
+        let mut mailbox = self.0.lock().unwrap();
+        mailbox.0 = tag;
+        mailbox.1 = None;
+    }
+
+    fn send(&self, tag: u64, item: T) {
+        let mut mailbox = self.0.lock().unwrap();
+        if mailbox.0 == tag {
+            mailbox.1 = Some(item);
+        }
+    }
+
+    fn recv(&self) -> Option<(u64, T)> {
+        let mut mailbox = self.0.lock().unwrap();
+        let tag = mailbox.0;
+        let msg = mailbox.1.take();
+        msg.map(|t| (tag, t))
+    }
+}
+
 enum DragDropEvent {
     Error(String),
     List(ArchiveView),
@@ -65,7 +91,8 @@ enum DragDropState {
 struct DragDrop {
     state: DragDropState,
     root: PathBuf,
-    pump: Option<(Sender<DragDropEvent>, Receiver<DragDropEvent>)>,
+    tag: u64,
+    mailbox: &'static Mailbox<DragDropEvent>,
     archive: Option<Archive>,
     view: Option<ArchiveView>,
     complete: Option<Box<dyn FnOnce() + Send + Sync>>,
@@ -74,10 +101,19 @@ struct DragDrop {
 
 impl DragDrop {
     fn new(root: &Path) -> Self {
+        static DRAG_DROP_MAILBOX: Mailbox<DragDropEvent> = Mailbox::<DragDropEvent>::new();
+
+        let tag = 1;
+        let mut mailbox = DRAG_DROP_MAILBOX.0.lock().unwrap();
+        assert!(mailbox.0 == 0 && mailbox.1.is_none());
+        mailbox.0 = tag;
+        drop(mailbox);
+
         Self {
             state: DragDropState::None,
             root: root.canonicalize().unwrap(),
-            pump: None,
+            tag,
+            mailbox: &DRAG_DROP_MAILBOX,
             archive: None,
             view: None,
             complete: None,
@@ -87,37 +123,37 @@ impl DragDrop {
 
     fn clear(&mut self) -> bool {
         let redraw = self.state != DragDropState::None
-            || self.pump.is_some()
             || self.archive.is_some()
             || self.view.is_some();
         self.state = DragDropState::None;
-        self.pump = None;
         self.archive = None;
         self.view = None;
         redraw
     }
 
     fn poll(&mut self) -> bool {
-        if let Some((_send, recv)) = &self.pump {
-            let mut new_state = self.state;
-            while let Ok(event) = recv.try_recv() {
-                new_state = match event {
-                    DragDropEvent::Error(err) => {
-                        crate::log::log(&err);
-                        self.error = Some(err);
-                        DragDropState::None
-                    }
-                    DragDropEvent::List(view) => {
-                        self.view = Some(view);
-                        if self.state == DragDropState::Copying {
-                            self.state
-                        } else {
-                            DragDropState::Dragging
-                        }
-                    }
-                    DragDropEvent::Copy => DragDropState::Copied,
-                }
+        let mailbox = self.mailbox;
+        if let Some((tag, event)) = mailbox.recv() {
+            if tag != self.tag {
+                return true;
             }
+
+            let new_state = match event {
+                DragDropEvent::Error(err) => {
+                    crate::log::log(&err);
+                    self.error = Some(err);
+                    DragDropState::None
+                }
+                DragDropEvent::List(view) => {
+                    self.view = Some(view);
+                    if self.state == DragDropState::Copying {
+                        self.state
+                    } else {
+                        DragDropState::Dragging
+                    }
+                }
+                DragDropEvent::Copy => DragDropState::Copied,
+            };
 
             if new_state != self.state {
                 let old_state = self.state;
@@ -157,21 +193,18 @@ impl DragDrop {
     }
 
     fn copy(&mut self) {
-        if let Some((send, _recv)) = &self.pump {
-            if self.is_dragging() {
-                let view = self.view.as_mut().unwrap();
-                let complete = self.complete.take().unwrap();
-                let send = send.clone();
-                view.copy(&self.root, move |count| {
-                    let _ = match count {
-                        Ok(_count) => send.send(DragDropEvent::Copy),
-                        Err(err) => send.send(DragDropEvent::Error(Self::format_error(&err))),
-                    };
-                    complete();
-                });
-            }
-        } else {
-            self.state = DragDropState::None;
+        if self.is_dragging() {
+            let view = self.view.as_mut().unwrap();
+            let complete = self.complete.take().unwrap();
+            let tag = self.tag;
+            let mailbox = self.mailbox;
+            view.copy(&self.root, move |count| {
+                match count {
+                    Ok(_count) => mailbox.send(tag, DragDropEvent::Copy),
+                    Err(err) => mailbox.send(tag, DragDropEvent::Error(Self::format_error(&err))),
+                }
+                complete();
+            });
         }
     }
 
@@ -188,21 +221,22 @@ impl DragDrop {
         // see DragDrop::mouse_leave
         //assert!(matches!(self.state, DragDropState::None | DragDropState::Copied));
         self.error = None;
+        self.tag += 1;
+        self.mailbox.clear(self.tag);
 
         match Archive::new(files, check_archive) {
             Ok(archive) => {
-                let (send, recv) = mpsc::channel();
-                let send_ = send.clone();
+                let tag = self.tag;
+                let mailbox = self.mailbox;
                 archive.view(move |view| {
-                    let _ = match view {
-                        Ok(view) => send_.send(DragDropEvent::List(view)),
+                    match view {
+                        Ok(view) => mailbox.send(tag, DragDropEvent::List(view)),
                         Err(err) if err.kind() == io::ErrorKind::WouldBlock => return,
-                        Err(err) => send_.send(DragDropEvent::Error(Self::format_error(&err))),
-                    };
+                        Err(err) => mailbox.send(tag, DragDropEvent::Error(Self::format_error(&err))),
+                    }
                     complete();
                 });
                 self.state = DragDropState::Listing;
-                self.pump = Some((send, recv));
                 self.archive = Some(archive);
             }
             Err(err) => {
