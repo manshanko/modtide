@@ -631,8 +631,8 @@ impl ModListWidget {
                     } else {
                         match m.state {
                             ModState::Enabled => (),
-                            ModState::Disabled => all_enabled = false,
-                            ModState::MissingEntry => (),
+                            ModState::Disabled
+                            | ModState::MissingEntry => all_enabled = false,
                             ModState::NotInstalled => (),
                         }
                     };
@@ -643,7 +643,8 @@ impl ModListWidget {
                 if let Some(m) = mods.get_mut(*i) {
                     match (all_enabled, m.state.clone()) {
                         (true, ModState::Enabled) => m.state = ModState::Disabled,
-                        (false, ModState::Disabled) => m.state = ModState::Enabled,
+                        (false, ModState::Disabled | ModState::MissingEntry)
+                            => m.state = ModState::Enabled,
                         _ => (),
                     }
                 }
@@ -850,6 +851,7 @@ impl super::Widget for ModListWidget {
                     ModListEvent::DragDropPoll => {
                         if self.drag_drop.poll() {
                             if self.drag_drop.state == DragDropState::Copied {
+                                self.selected.clear();
                                 self.mount().unwrap();
 
                                 if let Some(view) = &self.drag_drop.view
