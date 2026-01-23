@@ -377,7 +377,7 @@ impl Control {
             hwnd: self.display,
             widget: i,
             events: &mut self.events,
-            drag_files: self.drag_files.as_ref().map(|v| &**v),
+            drag_files: self.drag_files.as_deref(),
         };
         let widget = &mut self.widgets[i];
         widget.inner.handle_event(&mut scope, event);
@@ -701,7 +701,7 @@ unsafe extern "system" fn wnd_proc(
         } else if msg == Control::WM_PRIV_DRAGENTER {
             control.mouse_leave(&Default::default());
             let files = unsafe {
-                assert!(w_param.0 != 0 && w_param.0 % 8 == 0);
+                assert!(w_param.0 != 0 && w_param.0.is_multiple_of(8));
                 &mut *(w_param.0 as *mut Vec<PathBuf>)
             };
             control.drag_enter(files);

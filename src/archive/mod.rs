@@ -66,8 +66,8 @@ fn entry_cmp_(
     let mut prefix_match = true;
     let mut checked = 0;
     while let (Some(a), Some(b)) = (ap.next(), bp.next()) {
-        let mut a = a.as_bytes().into_iter();
-        let mut b = b.as_bytes().into_iter();
+        let mut a = a.as_bytes().iter();
+        let mut b = b.as_bytes().iter();
         while let (Some(a), Some(b)) = (a.next(), b.next()) {
             let a = a.to_ascii_lowercase();
             let b = b.to_ascii_lowercase();
@@ -167,12 +167,11 @@ impl ArchiveList {
         entries.sort_by(entry_cmp);
         let mut prev: Option<&DirEntry> = None;
         for entry in &entries {
-            if let Some(prev) = prev {
-                if entry.kind != prev.kind
-                    && entry.path == prev.path
-                {
-                    panic!("conflict: {:?}", entry.path);
-                }
+            if let Some(prev) = prev
+                && entry.kind != prev.kind
+                && entry.path == prev.path
+            {
+                panic!("conflict: {:?}", entry.path);
             }
             prev = Some(entry);
         }
@@ -205,17 +204,17 @@ impl<T: AsRef<[DirEntry]>> ArchiveList<T> {
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, FileType, usize)> {
         let e = self.entries.as_ref();
-        e.into_iter()
+        e.iter()
             .map(|entry| {
                 let path = &entry.path[self.offset..];
                 let mut iter = path.split('/');
                 let mut last = iter.next().expect("internal error from sorting ArchiveList");
                 let mut depth = 0;
-                while let Some(part) = iter.next() {
+                for part in iter {
                     last = part;
                     depth += 1;
                 }
-                (last, entry.kind.clone(), depth)
+                (last, entry.kind, depth)
             })
     }
 }
@@ -264,7 +263,7 @@ impl Archive {
         }
         Ok(Archive(Arc::new(ArchiveInner {
             monitor: Monitor(AtomicBool::new(false)),
-            archives: archives,
+            archives,
             fixup,
         })))
     }
@@ -285,7 +284,7 @@ impl Archive {
                     }
                 };
 
-                let prefix = match fixup(&p, &list) {
+                let prefix = match fixup(p, &list) {
                     Ok(p) => p,
                     Err(err) => {
                         complete(Err(err));
@@ -337,9 +336,8 @@ impl ArchiveView {
         thread::spawn(move || {
             let mut mods_exists = false;
             let mut count = 0;
-            for i in 0..prefixes.len() {
+            for (i, prefix) in prefixes.iter().enumerate() {
                 let rdr = &inner.archives[i].1;
-                let prefix = prefixes[i].clone();
 
                 let _owner;
                 let path = match prefix {

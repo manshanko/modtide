@@ -169,7 +169,7 @@ impl ModEngine {
                 }
             }
             for name in &meta.require {
-                if !meta.load_before.contains(&name)
+                if !meta.load_before.contains(name)
                     && let Err(i) = entry.binary_search(&name.as_str())
                 {
                     used.insert(name.as_str());
@@ -232,7 +232,7 @@ impl ModEngine {
                 let a = &self.mods[a.1].name;
                 let b = &self.mods[b.1].name;
                 // TODO: case insensitive
-                ord = a.cmp(&b);
+                ord = a.cmp(b);
             }
             ord
         });
@@ -269,6 +269,7 @@ pub struct Metadata {
     load_before: Vec<String>,
     load_after: Vec<String>,
     require: Vec<String>,
+    #[allow(dead_code)]
     version: Option<String>,
 }
 

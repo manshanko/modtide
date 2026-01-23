@@ -98,7 +98,7 @@ impl IDropTarget_Impl for DropTarget_Impl {
                             Some(&mut buf),
                         );
                         let path = &buf[0..len as usize];
-                        out.push(PathBuf::from(OsString::from_wide(&path)));
+                        out.push(PathBuf::from(OsString::from_wide(path)));
                     }
 
                     let res = SendMessageW(

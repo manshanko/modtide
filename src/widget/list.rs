@@ -42,7 +42,7 @@ fn check_archive(_path: &Path, list: &ArchiveList) -> io::Result<Prefix> {
             }
         }
     }
-    Err(io::Error::new(io::ErrorKind::Other, "unknown layout from dragdrop archive"))
+    Err(io::Error::other("unknown layout from dragdrop archive"))
 }
 
 struct Mailbox<T: Send>(Mutex<(u64, Option<T>)>);
@@ -197,8 +197,9 @@ impl DragDrop {
     fn copy(&mut self) {
         if self.view.is_none() {
             self.state = DragDropState::None;
-        } else if self.is_dragging() {
-            let view = self.view.as_mut().unwrap();
+        } else if self.is_dragging()
+            && let Some(view) = self.view.as_mut()
+        {
             let complete = self.complete.take().unwrap();
             let tag = self.tag;
             let mailbox = self.mailbox;
@@ -741,7 +742,7 @@ impl ModListWidget {
     ) {
         let left = Self::MARGIN_X;
         let top = Self::MARGIN_Y as i32;
-        let item_height = self.item_height as i32;
+        let item_height = self.item_height;
 
         if hovered {
             self.brush.set_color(&Self::MOD_HIGHLIGHT);
@@ -1359,7 +1360,7 @@ impl super::Widget for ModListWidget {
                 } else {
                     text.clear();
                     text.push_str(name);
-                    text.push_str("/");
+                    text.push('/');
                     &text
                 };
 

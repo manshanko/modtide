@@ -235,12 +235,11 @@ impl ArchiveReader for Zip {
         self.records(|record| {
             monitor.stopped()?;
 
-            if first && let Some((root, _)) = record.name.split_once('/') {
-                if let Err(err) = fs::create_dir(dest.join(root))
-                    && err.kind() != io::ErrorKind::AlreadyExists
-                {
-                    return Err(err);
-                }
+            if first && let Some((root, _)) = record.name.split_once('/')
+                && let Err(err) = fs::create_dir(dest.join(root))
+                && err.kind() != io::ErrorKind::AlreadyExists
+            {
+                return Err(err);
             }
             first = false;
 
@@ -251,7 +250,7 @@ impl ArchiveReader for Zip {
                     return Err(err);
                 }
             } else if record.attr.is_file() {
-                let data = self.read_record(&record, &mut buffer)?;
+                let data = self.read_record(record, &mut buffer)?;
                 fs::write(dest.join(record.name), data)?;
             }
             Ok(())
