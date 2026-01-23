@@ -852,6 +852,13 @@ impl ModListWidget {
         }
     }
 
+    fn toggle_patch(&mut self) {
+        if let Err(err) = crate::patch::toggle_patch(&self.root, !self.is_patched) {
+            crate::log::log(&format!("error while toggling patch: {err:?}"));
+        }
+        self.mount().unwrap();
+    }
+
     pub fn send(
         control: &mut super::ControlScope,
         event: ModListEvent,
@@ -947,11 +954,7 @@ impl super::Widget for ModListWidget {
                         control.redraw();
                     }
                     ModListEvent::TogglePatch => {
-                        self.is_patched = crate::patch::is_patched(&self.root);
-                        if let Err(err) = crate::patch::toggle_patch(&self.root, !self.is_patched) {
-                            crate::log::log(&format!("error while toggling patch: {err:?}"));
-                        }
-                        self.mount().unwrap();
+                        self.toggle_patch();
                         control.redraw();
                     }
                     ModListEvent::BrowseDarktide => Self::open(&self.root),
@@ -1168,14 +1171,18 @@ impl super::Widget for ModListWidget {
             }
 
             EventKind::MouseDoubleClick => {
-                if is_inside
-                    && !self.dropdown_defer
-                    && Entry::Mod(self.active_mod) == self.get_entry(self.mouse_pos)
-                    && !self.selected.is_empty()
-                {
-                    self.toggle_selected();
-                    self.update_mod_lorder();
-                    control.redraw();
+                if is_inside && !self.dropdown_defer {
+                    let entry = self.get_entry((x, y));
+                    if Entry::Mod(self.active_mod) == entry
+                        && !self.selected.is_empty()
+                    {
+                        self.toggle_selected();
+                        self.update_mod_lorder();
+                        control.redraw();
+                    } else if Entry::Builtin(0) == entry {
+                        self.toggle_patch();
+                        control.redraw();
+                    }
                 }
             }
 
