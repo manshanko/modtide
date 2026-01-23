@@ -231,8 +231,17 @@ impl ModEngine {
             if ord.is_eq() {
                 let a = &self.mods[a.1].name;
                 let b = &self.mods[b.1].name;
-                // TODO: case insensitive
-                ord = a.cmp(b);
+
+                let mut a = a.as_bytes().iter();
+                let mut b = b.as_bytes().iter();
+                while let (Some(a), Some(b)) = (a.next(), b.next()) {
+                    let a = a.to_ascii_lowercase();
+                    let b = b.to_ascii_lowercase();
+                    ord = a.cmp(&b);
+                    if ord.is_ne() {
+                        break;
+                    }
+                }
             }
             ord
         });
