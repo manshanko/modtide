@@ -277,6 +277,7 @@ pub enum ModListEvent {
     DragDropPoll = 2,
     SortMods     = 3,
     TogglePatch  = 4,
+    BrowseDarktide = 5,
 }
 
 impl ModListEvent {
@@ -287,6 +288,7 @@ impl ModListEvent {
             2 => ModListEvent::DragDropPoll,
             3 => ModListEvent::SortMods,
             4 => ModListEvent::TogglePatch,
+            5 => ModListEvent::BrowseDarktide,
             _ => return None,
         })
     }
@@ -669,13 +671,48 @@ impl ModListWidget {
         }
     }
 
-    fn open_selected(&self) {
+    fn open(path: &Path) {
         use std::os::windows::ffi::OsStrExt;
 
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Threading::CreateProcessW;
         use windows::Win32::System::Threading::STARTUPINFOW;
 
+        let osstr = path.as_os_str();
+        let mut cmd = b"C:\\Windows\\explorer.exe \"".map(|b| b as u16).to_vec();
+        let mut wide = osstr.encode_wide();
+        if osstr.as_encoded_bytes().starts_with(b"\\\\?\\") {
+            let _ = wide.nth(3);
+        }
+        cmd.extend(wide);
+        cmd.push(b'"' as u16);
+        cmd.push(0);
+
+        let info = STARTUPINFOW {
+            cb: core::mem::size_of::<STARTUPINFOW>() as u32,
+            ..Default::default()
+        };
+        let mut out = Default::default();
+        unsafe {
+            if CreateProcessW(
+                windows::core::w!(r"C:\Windows\explorer.exe"),
+                Some(windows::core::PWSTR(cmd.as_mut_ptr())),
+                None,
+                None,
+                false,
+                Default::default(),
+                None,
+                None,
+                &info,
+                &mut out,
+            ).is_ok() {
+                let _ = CloseHandle(out.hProcess);
+                let _ = CloseHandle(out.hThread);
+            }
+        }
+    }
+
+    fn open_selected(&self) {
         for i in &self.selected {
             let Some(m) = self.lorder.mods.get(*i) else {
                 continue;
@@ -689,38 +726,7 @@ impl ModListWidget {
                 continue;
             };
 
-            let osstr = path.into_os_string();
-            let mut cmd = b"C:\\Windows\\explorer.exe \"".map(|b| b as u16).to_vec();
-            let mut wide = osstr.encode_wide();
-            if osstr.as_encoded_bytes().starts_with(b"\\\\?\\") {
-                let _ = wide.nth(3);
-            }
-            cmd.extend(wide);
-            cmd.push(b'"' as u16);
-            cmd.push(0);
-
-            let info = STARTUPINFOW {
-                cb: core::mem::size_of::<STARTUPINFOW>() as u32,
-                ..Default::default()
-            };
-            let mut out = Default::default();
-            unsafe {
-                if CreateProcessW(
-                    windows::core::w!(r"C:\Windows\explorer.exe"),
-                    Some(windows::core::PWSTR(cmd.as_mut_ptr())),
-                    None,
-                    None,
-                    false,
-                    Default::default(),
-                    None,
-                    None,
-                    &info,
-                    &mut out,
-                ).is_ok() {
-                    let _ = CloseHandle(out.hProcess);
-                    let _ = CloseHandle(out.hThread);
-                }
-            }
+            Self::open(&path);
         }
     }
 
@@ -947,6 +953,7 @@ impl super::Widget for ModListWidget {
                         self.mount().unwrap();
                         control.redraw();
                     }
+                    ModListEvent::BrowseDarktide => Self::open(&self.root),
                 }
             }
             return;
