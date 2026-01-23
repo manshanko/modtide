@@ -304,7 +304,6 @@ pub struct ModListWidget {
     mods_path: PathBuf,
     lorder: ModEngine,
     builtins: Vec<&'static str>,
-    using_aml: bool,
     is_patched: bool,
 
     scroll: i32,
@@ -384,7 +383,6 @@ impl ModListWidget {
             mods_path,
             lorder: ModEngine::new(),
             builtins: Vec::new(),
-            using_aml: false,
             is_patched: false,
 
             scroll: 0,
@@ -432,16 +430,11 @@ impl ModListWidget {
     }
 
     pub fn mount(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.using_aml = false;
-
         self.builtins.clear();
+
         self.mods_path.push("base/mod_manager.lua");
-        if let Ok(data) = std::fs::read_to_string(&self.mods_path) {
+        if self.mods_path.exists() {
             self.builtins.push("Darktide Mod Loader");
-            if data.contains("AML") {
-                self.using_aml = true;
-                self.builtins.push("AML");
-            }
         }
         self.mods_path.pop();
         self.mods_path.pop();
@@ -453,24 +446,19 @@ impl ModListWidget {
         self.mods_path.pop();
         self.mods_path.pop();
 
-        let _owner;
-        let load_order = if self.using_aml {
-            ""
-        } else {
-            _owner = match std::fs::read_to_string(self.mods_path.join("mod_load_order.txt")) {
-                Ok(s) => s,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
-                Err(err) => return Err(err.into()),
-            };
-            if let Some((first, rest)) = _owner.split_once('\n') {
-                if first.starts_with(Self::MODTIDE_HEADER_PREFIX) {
-                    rest
-                } else {
-                    &_owner
-                }
+        let data = match std::fs::read_to_string(self.mods_path.join("mod_load_order.txt")) {
+            Ok(s) => s,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(err) => return Err(err.into()),
+        };
+        let load_order = if let Some((first, rest)) = data.split_once('\n') {
+            if first.starts_with(Self::MODTIDE_HEADER_PREFIX) {
+                rest
             } else {
-                &_owner
+                &data
             }
+        } else {
+            &data
         };
 
         let paths = ModEngine::scan(&self.mods_path)?;
@@ -637,21 +625,12 @@ impl ModListWidget {
             let mut all_enabled = true;
             for i in &self.selected {
                 if let Some(m) = mods.get(*i) {
-                    if self.using_aml {
-                        match m.state {
-                            ModState::Enabled
-                            | ModState::MissingEntry => (),
-                            ModState::Disabled => all_enabled = false,
-                            ModState::NotInstalled => (),
-                        }
-                    } else {
-                        match m.state {
-                            ModState::Enabled => (),
-                            ModState::Disabled
-                            | ModState::MissingEntry => all_enabled = false,
-                            ModState::NotInstalled => (),
-                        }
-                    };
+                    match m.state {
+                        ModState::Enabled => (),
+                        ModState::Disabled
+                        | ModState::MissingEntry => all_enabled = false,
+                        ModState::NotInstalled => (),
+                    }
                 }
             }
 
@@ -1281,23 +1260,11 @@ impl super::Widget for ModListWidget {
                     break;
                 }
 
-                let color = if self.using_aml {
-                    match m.state {
-                        ModState::Enabled
-                        | ModState::MissingEntry => Self::MOD_ENABLED_BLUE,
-                        ModState::Disabled => Self::MOD_DISABLED_GRAY,
-                        ModState::NotInstalled => {
-                            // TODO: log bad state
-                            continue;
-                        }
-                    }
-                } else {
-                    match m.state {
-                        ModState::Enabled => Self::MOD_ENABLED_BLUE,
-                        ModState::Disabled => Self::MOD_DISABLED_GRAY,
-                        ModState::MissingEntry => Self::MOD_MISSING_ENTRY_ORANGE,
-                        ModState::NotInstalled => Self::MOD_NOT_INSTALLED_RED,
-                    }
+                let color = match m.state {
+                    ModState::Enabled => Self::MOD_ENABLED_BLUE,
+                    ModState::Disabled => Self::MOD_DISABLED_GRAY,
+                    ModState::MissingEntry => Self::MOD_MISSING_ENTRY_ORANGE,
+                    ModState::NotInstalled => Self::MOD_NOT_INSTALLED_RED,
                 };
 
                 self.draw_mod(
