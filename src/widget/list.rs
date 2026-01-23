@@ -915,7 +915,16 @@ impl super::Widget for ModListWidget {
                         }
                     }
                     ModListEvent::SortMods => {
-                        self.lorder.sort();
+                        match self.lorder.sort() {
+                            None => crate::log::log("circular dependencies found"),
+                            Some(missing) if !missing.is_empty() => {
+                                for (mod_name, requires) in missing {
+                                    crate::log::log(&format!(
+                                        "mod {mod_name} missing dependency \"{requires}\""));
+                                }
+                            }
+                            _ => (),
+                        }
                         self.update_mod_lorder();
                         control.redraw();
                     }
