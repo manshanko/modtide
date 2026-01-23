@@ -1247,10 +1247,16 @@ impl super::Widget for ModListWidget {
             for (i, builtin) in self.builtins[start..].iter().enumerate() {
                 let i = i + start;
 
+                let color = if i == 0 && !self.is_patched {
+                    Self::MOD_NOT_INSTALLED_RED
+                } else {
+                    Self::MOD_BUILTIN_GOLD
+                };
+
                 self.draw_mod(
                     context,
                     builtin,
-                    Self::MOD_BUILTIN_GOLD,
+                    color,
                     offset,
                     Some(Entry::Builtin(i)) == self.can_hover.then(|| self.get_entry(self.mouse_pos)),
                     false,
