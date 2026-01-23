@@ -275,6 +275,7 @@ pub enum ModListEvent {
     ToggleSelected = 0,
     OpenSelected = 1,
     DragDropPoll = 2,
+    SortMods     = 3,
 }
 
 impl ModListEvent {
@@ -283,6 +284,7 @@ impl ModListEvent {
             0 => ModListEvent::ToggleSelected,
             1 => ModListEvent::OpenSelected,
             2 => ModListEvent::DragDropPoll,
+            3 => ModListEvent::SortMods,
             _ => return None,
         })
     }
@@ -912,6 +914,11 @@ impl super::Widget for ModListWidget {
                             control.redraw();
                         }
                     }
+                    ModListEvent::SortMods => {
+                        self.lorder.sort();
+                        self.update_mod_lorder();
+                        control.redraw();
+                    }
                 }
             }
             return;
@@ -1000,12 +1007,6 @@ impl super::Widget for ModListWidget {
 
                             control.redraw();
                         }
-
-                        if self.dropdown_defer && is_right {
-                            self.can_hover = true;
-                            DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
-                            control.redraw();
-                        }
                     } else if self.can_drag {
                         let (swap_to, _) = self.get_slot((x, y));
                         if self.move_selected(swap_to) {
@@ -1021,6 +1022,16 @@ impl super::Widget for ModListWidget {
                             control.redraw();
                         }
                     }
+                }
+
+                if is_right && self.dropdown_defer {
+                    self.can_hover = true;
+                    if self.selected.is_empty() {
+                        DropdownWidget::show(control, x, y, DropdownMenu::Meta);
+                    } else {
+                        DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
+                    }
+                    control.redraw();
                 }
 
                 if event.kind == EventKind::MouseRightRelease {
@@ -1046,13 +1057,13 @@ impl super::Widget for ModListWidget {
             | EventKind::MouseRightPress => {
                 let is_right = event.kind == EventKind::MouseRightPress;
                 if is_inside {
+                    self.dropdown_defer |= is_right;
                     self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry((x, y)) {
                         if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {
                             self.selected.clear();
                         }
 
                         if is_right {
-                            self.dropdown_defer = true;
                             if !event.ctrl || event.shift {
                                 self.selected_pivot = clicked;
                                 if !self.selected.contains(&clicked) {

@@ -12,17 +12,22 @@ static MENU: &[&[(&str, ModListEvent)]] = &[
     &[
         ("Toggle", ModListEvent::ToggleSelected),
         ("Browse", ModListEvent::OpenSelected),
-    ]
+    ],
+    &[
+        ("Sort Mods", ModListEvent::SortMods),
+    ],
 ];
 
 pub enum DropdownMenu {
     ModSelected = 0,
+    Meta = 1,
 }
 
 impl DropdownMenu {
     fn from_u32(msg: u32) -> Option<Self> {
         Some(match msg {
             0 => DropdownMenu::ModSelected,
+            1 => DropdownMenu::Meta,
             _ => return None,
         })
     }
