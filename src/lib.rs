@@ -17,6 +17,7 @@ use widget::button::ButtonWidget;
 use widget::dropdown::DropdownWidget;
 use widget::list::ModListWidget;
 mod mod_engine;
+mod patch;
 
 // TODO: stub like wine/dlls/dwmapi/dwmapi_main.c
 #[unsafe(no_mangle)]
