@@ -1224,10 +1224,7 @@ impl super::Widget for ModListWidget {
 
         let start = self.scroll / self.item_height;
         let mut start = usize::try_from(start).unwrap();
-        let mut offset = self.scroll % self.item_height;
-        if offset != 0 {
-            offset = offset.saturating_sub(self.item_height);
-        }
+        let mut offset = -(self.scroll % self.item_height);
 
         if start < self.builtins.len() {
             for (i, builtin) in self.builtins[start..].iter().enumerate() {
