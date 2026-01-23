@@ -496,4 +496,21 @@ mod test {
         engine.load("", metas).unwrap();
         assert!(engine.sort().is_none());
     }
+
+    #[test]
+    fn sort_missing_require() {
+        let test: &[(&str, &str)] = &[
+            ("a", "require = {\"b\"}"),
+        ];
+
+        let mut metas = Vec::new();
+        for (name, file) in test {
+            let path = format!("{name}/{name}.mod");
+            metas.push(Metadata::fuzzy_parse_mod(&path, file));
+        }
+
+        let mut engine = ModEngine::new();
+        engine.load("", metas).unwrap();
+        assert_eq!(1, engine.sort().unwrap().len());
+    }
 }
