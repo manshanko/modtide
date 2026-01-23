@@ -716,18 +716,18 @@ impl ModListWidget {
         context: &mut super::DrawScope,
         text: &str,
         color: [f32; 4],
-        o: u32,
+        o: i32,
         hovered: bool,
         selected: bool,
     ) {
         let left = Self::MARGIN_X;
-        let top = Self::MARGIN_Y;
-        let item_height = self.item_height as u32;
+        let top = Self::MARGIN_Y as i32;
+        let item_height = self.item_height as i32;
 
         if hovered {
             self.brush.set_color(&Self::MOD_HIGHLIGHT);
 
-            let mid = (top + o + self.item_height as u32 / 2) as f32;
+            let mid = (top + o + item_height / 2) as f32;
             let from = [
                 left as f32 + 6.0,
                 mid,
@@ -757,7 +757,7 @@ impl ModListWidget {
         if selected {
             self.brush.set_color(&color);
 
-            let mid = (top + o + self.item_height as u32 / 2) as f32;
+            let mid = (top + o + item_height / 2) as f32;
             let from = [
                 left as f32 + 8.0,
                 mid,
@@ -1164,7 +1164,7 @@ impl super::Widget for ModListWidget {
         let mut start = usize::try_from(start).unwrap();
         let mut offset = self.scroll % self.item_height;
         if offset != 0 {
-            offset -= self.item_height;
+            offset = offset.saturating_sub(self.item_height);
         }
 
         if start < self.builtins.len() {
@@ -1175,7 +1175,7 @@ impl super::Widget for ModListWidget {
                     context,
                     builtin,
                     Self::MOD_BUILTIN_GOLD,
-                    offset as u32,
+                    offset,
                     Some(Entry::Builtin(i)) == self.can_hover.then(|| self.get_entry(self.mouse_pos)),
                     false,
                 );
@@ -1215,7 +1215,7 @@ impl super::Widget for ModListWidget {
                     context,
                     m.name(),
                     color,
-                    offset as u32,
+                    offset,
                     Some(Entry::Mod(i)) == self.can_hover.then(|| self.get_entry(self.mouse_pos)),
                     self.selected.contains(&i),
                 );
