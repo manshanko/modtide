@@ -575,7 +575,7 @@ impl ModListWidget {
 
         assert!(slot >= 0);
         assert!(slot % self.item_height == 0);
-        assert!(entry < self.lorder.mods.len());
+        assert!(entry <= self.lorder.mods.len());
         (entry, offset as u32)
     }
 
@@ -588,9 +588,9 @@ impl ModListWidget {
 
         debug_assert!(!self.selected.is_empty());
         debug_assert!(!mods.is_empty());
-        debug_assert!(to < mods.len());
+        debug_assert!(to <= mods.len());
 
-        let to = to.min(mods.len().saturating_sub(1));
+        let to = to.min(mods.len());
         let intersect = match self.selected.binary_search(&to) {
             Ok(i) => i,
             Err(i) => i,
