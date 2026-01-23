@@ -1,8 +1,11 @@
 Basic mod manager that hooks and overlays the Darktide launcher.
 
 Current features:
-- toggle/reorder/install mods
+- toggle/reorder/sort/install mods
+- toggle Darktide mod loader patch (also supports [dt-mod-autopatch])
 - linux/wine support (~~winter~~ year of the linux desktop is coming)
+
+[dt-mod-autopatch]: https://github.com/manshanko/dt-mod-autopatch
 
 ## Use
 
@@ -12,10 +15,10 @@ When working a `MODS` button will appear in the upper right corner of the Darkti
 [latest release]: https://github.com/manshanko/modtide/releases/latest
 
 The mod list supports:
-- selecting multiple mods (click with shift/ctrl)
+- select multiple mods (click with shift/ctrl)
 - double click or `SPACE` toggles selected mods
-- click and drag selected mods
-- dropdown with right click
+- drag selected mods to reorder
+- right click menu (separate options if mods are selected)
 - [drag drop mods to install](#installing-mods)
 
 ### Installing Mods
