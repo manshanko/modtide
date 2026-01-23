@@ -962,7 +962,7 @@ impl super::Widget for ModListWidget {
                             DropdownWidget::show(control, x, y, DropdownMenu::ModSelected);
                             control.redraw();
                         }
-                    } else {
+                    } else if self.can_drag {
                         let (swap_to, _) = self.get_slot((x, y));
                         if self.move_selected(swap_to) {
                             if clicked < swap_to {
@@ -986,7 +986,7 @@ impl super::Widget for ModListWidget {
                 self.can_drag = false;
                 self.select_defer = None;
 
-                if self.update_mouse(self.mouse_pos) {
+                if self.update_mouse((x, y)) {
                     control.redraw();
                 }
             }
@@ -1002,7 +1002,7 @@ impl super::Widget for ModListWidget {
             | EventKind::MouseRightPress => {
                 let is_right = event.kind == EventKind::MouseRightPress;
                 if is_inside {
-                    self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry(self.mouse_pos) {
+                    self.clicked_mod = if let Entry::Mod(clicked) = self.get_entry((x, y)) {
                         if !(event.shift || event.ctrl || self.selected.contains(&clicked)) {
                             self.selected.clear();
                         }
