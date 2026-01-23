@@ -276,6 +276,7 @@ pub enum ModListEvent {
     OpenSelected = 1,
     DragDropPoll = 2,
     SortMods     = 3,
+    TogglePatch  = 4,
 }
 
 impl ModListEvent {
@@ -285,6 +286,7 @@ impl ModListEvent {
             1 => ModListEvent::OpenSelected,
             2 => ModListEvent::DragDropPoll,
             3 => ModListEvent::SortMods,
+            4 => ModListEvent::TogglePatch,
             _ => return None,
         })
     }
@@ -295,10 +297,12 @@ pub struct ModListWidget {
     brush: SolidColorBrush,
     text_format: TextFormat,
 
+    root: PathBuf,
     mods_path: PathBuf,
     lorder: ModEngine,
     builtins: Vec<&'static str>,
     using_aml: bool,
+    is_patched: bool,
 
     scroll: i32,
     item_height: i32,
@@ -364,16 +368,21 @@ impl ModListWidget {
         text_format: TextFormat,
     ) -> Self {
         let mods_path = mods_path.into();
+        let mut root = mods_path.clone();
+        root.pop();
+
         let drag_drop = DragDrop::new(mods_path.parent().unwrap());
         Self {
             background,
             brush,
             text_format,
 
+            root,
             mods_path,
             lorder: ModEngine::new(),
             builtins: Vec::new(),
             using_aml: false,
+            is_patched: false,
 
             scroll: 0,
             item_height: Self::ITEM_HEIGHT as i32,
@@ -463,6 +472,8 @@ impl ModListWidget {
 
         let paths = ModEngine::scan(&self.mods_path)?;
         self.lorder.load(load_order, paths)?;
+
+        self.is_patched = crate::patch::is_patched(&self.root);
 
         Ok(())
     }
@@ -926,6 +937,14 @@ impl super::Widget for ModListWidget {
                             _ => (),
                         }
                         self.update_mod_lorder();
+                        control.redraw();
+                    }
+                    ModListEvent::TogglePatch => {
+                        self.is_patched = crate::patch::is_patched(&self.root);
+                        if let Err(err) = crate::patch::toggle_patch(&self.root, !self.is_patched) {
+                            crate::log::log(&format!("error while toggling patch: {err:?}"));
+                        }
+                        self.mount().unwrap();
                         control.redraw();
                     }
                 }

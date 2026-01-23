@@ -14,6 +14,7 @@ static MENU: &[&[(&str, ModListEvent)]] = &[
         ("Browse", ModListEvent::OpenSelected),
     ],
     &[
+        ("Toggle Patch", ModListEvent::TogglePatch),
         ("Sort Mods", ModListEvent::SortMods),
     ],
 ];
