@@ -14,6 +14,8 @@ When working a `MODS` button will appear in the upper right corner of the Darkti
 
 [latest release]: https://github.com/manshanko/modtide/releases/latest
 
+![modtide on Wine](/docs/assets/modtide_wine.png)
+
 The mod list supports:
 - select multiple mods (click with shift/ctrl)
 - double click or `SPACE` toggles selected mods
