@@ -120,7 +120,7 @@ impl Zip {
             let attr = u32::from_le_bytes(*data[38..].first_chunk().unwrap());
             let offset = u32::from_le_bytes(*data[42..].first_chunk().unwrap());
 
-            let ty = match attr {
+            let ty = match attr & 0xff {
                 0x10 => FileType::Dir,
                 0x20 => FileType::File,
                 _ => return error("unknown file type in zip record"),
