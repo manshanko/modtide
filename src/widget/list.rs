@@ -801,6 +801,37 @@ impl ModListWidget {
         false
     }
 
+    fn update_scroll(
+        &mut self,
+        delta: i32,
+        align: bool,
+    ) -> bool {
+        let mut scroll = self.scroll;
+        if align {
+            if delta < 0 {
+                let bottom = self.scroll + Self::HEIGHT_INNER as i32;
+                scroll += self.item_height;
+                let diff = bottom % self.item_height;
+                if diff != 0 {
+                    scroll += self.item_height - diff;
+                }
+            } else {
+                scroll = scroll.saturating_sub(self.item_height + self.scroll % self.item_height);
+            }
+        } else {
+            scroll += delta;
+        }
+
+        let bottom_item = (scroll + Self::HEIGHT_INNER as i32 + self.item_height - 1) / self.item_height;
+        let max_item = i32::try_from(self.builtins.len() + self.lorder.mods.len()).unwrap();
+        if scroll >= 0 && scroll != self.scroll && bottom_item <= max_item {
+            self.scroll = scroll;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn send(
         control: &mut super::ControlScope,
         event: ModListEvent,
@@ -922,6 +953,19 @@ impl super::Widget for ModListWidget {
             EventKind::MouseMove(is_dragging) => {
                 if !self.can_drag {
                     self.can_hover = !is_dragging;
+                } else {
+                    let mut delta = 0;
+                    let y0 = top - y;
+                    let y1 = bottom - y;
+                    if y0.abs() < self.item_height {
+                        delta = -1;
+                    } else if y1.abs() < self.item_height {
+                        delta = 1;
+                    }
+
+                    if delta != 0 && self.update_scroll(delta, false) {
+                        control.redraw();
+                    }
                 }
 
                 if self.update_mouse((x, y)) {
@@ -1089,22 +1133,7 @@ impl super::Widget for ModListWidget {
             }
 
             EventKind::MouseScroll(delta) if delta != 0 => {
-                let mut scroll = self.scroll;
-                if delta < 0 {
-                    let bottom = self.scroll + Self::HEIGHT_INNER as i32;
-                    scroll += self.item_height;
-                    let diff = bottom % self.item_height;
-                    if diff != 0 {
-                        scroll += self.item_height - diff;
-                    }
-                } else {
-                    scroll = scroll.saturating_sub(self.item_height + self.scroll % self.item_height);
-                }
-
-                let bottom_item = (scroll + Self::HEIGHT_INNER as i32 + self.item_height - 1) / self.item_height;
-                let max_item = i32::try_from(self.builtins.len() + self.lorder.mods.len()).unwrap();
-                if scroll >= 0 && scroll != self.scroll && bottom_item <= max_item {
-                    self.scroll = scroll;
+                if self.update_scroll(delta, true) {
                     control.redraw();
                 }
             }
