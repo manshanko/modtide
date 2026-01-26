@@ -279,6 +279,7 @@ pub enum ModListEvent {
     SortMods     = 3,
     TogglePatch  = 4,
     BrowseDarktide = 5,
+    BrowseLogs = 6,
 }
 
 impl ModListEvent {
@@ -290,6 +291,7 @@ impl ModListEvent {
             3 => ModListEvent::SortMods,
             4 => ModListEvent::TogglePatch,
             5 => ModListEvent::BrowseDarktide,
+            6 => ModListEvent::BrowseLogs,
             _ => return None,
         })
     }
@@ -937,6 +939,18 @@ impl super::Widget for ModListWidget {
                         control.redraw();
                     }
                     ModListEvent::BrowseDarktide => Self::open(&self.root),
+                    ModListEvent::BrowseLogs => {
+                        // TODO: error reporting
+                        if let Some(appdata) = std::env::var_os("APPDATA")
+                            && let Ok(mut path) = Path::new(&appdata).canonicalize()
+                        {
+                            path.push(r"Fatshark\Darktide\console_logs");
+                            if !path.exists() {
+                                path.pop();
+                            }
+                            Self::open(&path);
+                        }
+                    }
                 }
             }
             return;
