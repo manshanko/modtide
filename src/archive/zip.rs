@@ -215,9 +215,15 @@ impl Zip {
 impl ArchiveReader for Zip {
     fn list(&self, monitor: &Monitor) -> Result<ArchiveList> {
         let mut entries = Vec::new();
+        let mut total = 0;
         let mut first = true;
         self.records(|record| {
             monitor.stopped()?;
+
+            total += record.size as u64;
+            if total > u32::MAX as u64 {
+                return Err(io::Error::other("zip output larger than supported"));
+            }
 
             if first && let Some((root, _)) = record.name.split_once('/') {
                 entries.push(DirEntry::new(root, FileType::Dir));
@@ -231,6 +237,7 @@ impl ArchiveReader for Zip {
 
     fn copy(&self, monitor: &Monitor, dest: &Path) -> Result<()> {
         let mut buffer = Vec::new();
+        let mut total = 0;
         let mut first = true;
         self.records(|record| {
             monitor.stopped()?;
@@ -251,6 +258,12 @@ impl ArchiveReader for Zip {
                 }
             } else if record.attr.is_file() {
                 let data = self.read_record(record, &mut buffer)?;
+
+                total += data.len() as u64;
+                if total > u32::MAX as u64 {
+                    return Err(io::Error::other("zip output larger than supported"));
+                }
+
                 fs::write(dest.join(record.name), data)?;
             }
             Ok(())
